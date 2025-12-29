@@ -1,0 +1,73 @@
+[{
+  "id": 1,
+  "name": "OOP",
+  "price": 80,
+  "category": "basic",
+  "active": true,
+  "image": "assets/images/book.jpg"
+},
+  {
+    "id": 2,
+    "name": "Java",
+    "price": 35,
+    "category": "code",
+    "active": true,
+    "image": "assets/images/book2.png"
+  },
+  {
+    "id": 3,
+    "name": "Python",
+    "price": 40,
+    "category": "basic",
+    "active": true,
+    "image": "assets/images/book3.jpg"
+  },
+  {
+    "id": 4,
+    "name": "OOP Advanced",
+    "price": 70,
+    "category": "code",
+    "active": false,
+    "image": "assets/images/book4.jpg"
+  },
+  {
+    "id": 5,
+    "name": "SQL",
+    "price": 100,
+    "category": "basic",
+    "active": true,
+    "image": "assets/images/book5.jpg"
+  },
+  {
+    "id": 6,
+    "name": "OOP Advanced 1",
+    "price": 70,
+    "category": "code",
+    "active": false,
+    "image": "assets/images/book4.jpg"
+  },
+  {
+    "id": 7,
+    "name": "OOP Advanced 2",
+    "price": 70,
+    "category": "code",
+    "active": false,
+    "image": "assets/images/book4.jpg"
+  },
+  {
+    "id": 8,
+    "name": "OOP Advanced 3",
+    "price": 70,
+    "category": "code",
+    "active": true,
+    "image": "assets/images/book4.jpg"
+  },
+  {
+    "id": 9,
+    "name": "OOP Advanced 4",
+    "price": 70,
+    "category": "code",
+    "active": true,
+    "image": "assets/images/book4.jpg"
+  }
+]
