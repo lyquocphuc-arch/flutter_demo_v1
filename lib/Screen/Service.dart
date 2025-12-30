@@ -6,45 +6,72 @@ import '../models/Booking.dart';
 class ApiService {
   final String baseUrl = "https://6951463270e1605a1089ad60.mockapi.io";
 
+  // --- 1. ROOMS ---
   Future<List<Room>> fetchRooms(int page, int limit) async {
-    // Gọi vào endpoint /HotelRoom
-    final response = await http.get(
-      Uri.parse('$baseUrl/HotelRoom?page=$page&limit=$limit'),
-    );
-
+    final response = await http.get(Uri.parse('$baseUrl/HotelRoom?page=$page&limit=$limit'));
     if (response.statusCode == 200) {
       List<dynamic> body = jsonDecode(response.body);
-      List<Room> rooms = body.map((dynamic item) => Room.fromJson(item)).toList();
-      return rooms;
+      return body.map((dynamic item) => Room.fromJson(item)).toList();
     } else {
       throw Exception('Không thể tải dữ liệu phòng');
     }
   }
 
-  Future<List<Booking>> fetchBookings() async {
-    final response = await http.get(Uri.parse('$baseUrl/bookings'));
+  // Cập nhật trạng thái phòng (Available <-> Reserved)
+  Future<void> updateRoomStatus(String roomId, String newStatus) async {
+    final url = Uri.parse('$baseUrl/HotelRoom/$roomId');
+    await http.put(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'status': newStatus}),
+    );
+  }
 
+  // --- 2. BOOKINGS (CRUD ĐẦY ĐỦ) ---
+
+  // A. Lấy danh sách (GET)
+  Future<List<Booking>> fetchBookings() async {
+    // Lưu ý: Bookings viết hoa theo MockAPI của bạn
+    final response = await http.get(Uri.parse('$baseUrl/Bookings'));
     if (response.statusCode == 200) {
       List<dynamic> body = jsonDecode(response.body);
       return body.map((item) => Booking.fromJson(item)).toList();
-    } else {
-      return [];
     }
+    return [];
   }
 
-  // Tạo Booking mới (Chỉ gọi khi đã check availability OK)
+  // B. Tạo mới (POST)
   Future<bool> createBooking(Booking booking) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/bookings'),
+      Uri.parse('$baseUrl/Bookings'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(booking.toJson()),
     );
     return response.statusCode == 201;
   }
+
+  // C. Cập nhật / Sửa (PUT) - Mới thêm
+  Future<bool> updateBooking(Booking booking) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/Bookings/${booking.id}'), // Gọi vào ID cụ thể
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(booking.toJson()),
+    );
+    return response.statusCode == 200;
+  }
+
+  // D. Xóa / Hủy (DELETE) - Mới thêm
+  Future<bool> deleteBooking(String bookingId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/Bookings/$bookingId'),
+    );
+    return response.statusCode == 200;
+  }
+
+  // 3. Logic check trùng lịch
   Future<bool> checkAvailability(String roomId, DateTime start, DateTime end) async {
     try {
       List<Booking> allBookings = await fetchBookings();
-
       var roomBookings = allBookings.where((b) => b.roomId == roomId).toList();
 
       for (var b in roomBookings) {
@@ -54,17 +81,13 @@ class ApiService {
       }
       return true;
     } catch (e) {
-      print("Lỗi check availability: $e");
       return false;
     }
   }
 
-  // --- 4. AUTH (Giữ nguyên) ---
+  // 4. Login giả
   Future<bool> login(String username, String password) async {
     await Future.delayed(const Duration(seconds: 1));
-    if (username.isNotEmpty && password.length >= 6) {
-      return true;
-    }
-    return false;
+    return username.isNotEmpty && password.length >= 6;
   }
 }

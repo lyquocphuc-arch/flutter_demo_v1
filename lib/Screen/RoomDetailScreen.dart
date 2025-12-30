@@ -16,7 +16,6 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
   final ApiService _apiService = ApiService();
   final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
 
-  // Controller
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   DateTimeRange? _selectedDateRange;
@@ -28,7 +27,6 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     super.dispose();
   }
 
-  // --- LOGIC FORM HIỂN THỊ ---
   void _showBookingForm(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -49,7 +47,17 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
               const SizedBox(height: 15),
               InkWell(
                 onTap: () async {
-                  final DateTimeRange? picked = await showDateRangePicker(context: context, firstDate: DateTime.now(), lastDate: DateTime(2026));
+                  // --- SỬA Ở ĐÂY ---
+                  // Đổi lastDate từ 2026 thành 2030 (hoặc xa hơn tùy ý)
+                  final DateTimeRange? picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2030), // Cho phép đặt lịch trước đến năm 2030
+                    helpText: 'Chọn ngày nhận và trả phòng', // Tiêu đề tiếng Việt cho dễ hiểu
+                    saveText: 'Xong',
+                  );
+                  // ------------------
+
                   if (picked != null) {
                     setState(() => _selectedDateRange = picked);
                     Navigator.pop(ctx);
@@ -84,62 +92,43 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     );
   }
 
-  // --- LOGIC XỬ LÝ ĐẶT PHÒNG (ĐÃ SỬA LỖI CRASH) ---
   Future<void> _handleBookingSubmit(BuildContext ctx) async {
-    // 1. Validate
     if (_nameController.text.isEmpty || _phoneController.text.isEmpty || _selectedDateRange == null) {
       ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Vui lòng nhập đầy đủ thông tin!"), backgroundColor: Colors.orange));
       return;
     }
-
     ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Đang kiểm tra lịch trống...")));
 
     try {
-      // 2. Check mounted để tránh lỗi nếu user thoát app giữa chừng
       if (!mounted) return;
-
-      // 3. Gọi API Check Conflict
       bool isAvailable = await _apiService.checkAvailability(widget.room.id, _selectedDateRange!.start, _selectedDateRange!.end);
-
       if (!mounted) return;
-
       if (!isAvailable) {
-        Navigator.pop(ctx); // Đóng Form
-        showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-                title: const Text("Thất bại", style: TextStyle(color: Colors.red)),
-                content: const Text("Phòng đã có người đặt trong khoảng thời gian này."),
-                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Đóng"))]
-            )
-        );
+        Navigator.pop(ctx);
+        showDialog(context: context, builder: (_) => AlertDialog(title: const Text("Thất bại", style: TextStyle(color: Colors.red)), content: const Text("Phòng đã bị trùng lịch!"), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Đóng"))]));
         return;
       }
 
-      // 4. Tạo Booking
       Booking newBooking = Booking(id: '', roomId: widget.room.id, customerName: _nameController.text, customerPhone: _phoneController.text, checkIn: _selectedDateRange!.start, checkOut: _selectedDateRange!.end);
       await _apiService.createBooking(newBooking);
 
+      await _apiService.updateRoomStatus(widget.room.id, "Reserved");
+
       if (!mounted) return;
+      Navigator.pop(ctx);
 
-      // --- SỬA LỖI NAVIGATOR Ở ĐÂY ---
-
-      Navigator.pop(ctx); // B1: Chỉ đóng Form nhập liệu (Modal)
-
-      // B2: Hiện Dialog Thành công TRƯỚC (khi màn hình vẫn còn đó)
       await showDialog(
           context: context,
-          barrierDismissible: false, // Bắt buộc bấm OK
+          barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
               title: const Text("Thành công", style: TextStyle(color: Colors.green)),
-              content: const Text("Bạn đã đặt phòng thành công!"),
+              content: const Text("Đặt phòng thành công!"),
               actions: [
                 TextButton(
                     onPressed: () {
-                      // B3: Khi bấm OK -> Đóng Dialog -> Rồi mới đóng Màn hình
-                      Navigator.pop(dialogContext); // Đóng Dialog
+                      Navigator.pop(dialogContext);
                       if (mounted) {
-                        Navigator.pop(context); // Đóng RoomDetailScreen về Home
+                        Navigator.pop(context, true);
                       }
                     },
                     child: const Text("OK")
@@ -147,146 +136,56 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
               ]
           )
       );
-
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text("Lỗi: $e")));
-      }
+      if (mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text("Lỗi: $e")));
     }
   }
 
-  // --- GIAO DIỆN CHÍNH (GIỮ NGUYÊN TASKBAR/APPBAR CỦA BẠN) ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.blueAccent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.blueAccent, elevation: 0,
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
         title: Container(
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: const TextField(
-            decoration: InputDecoration(
-              hintText: "Tìm kiếm...",
-              prefixIcon: Icon(Icons.search, color: Colors.grey),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.only(top: 5),
-            ),
-          ),
+          height: 40, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(5)),
+          child: const TextField(decoration: InputDecoration(hintText: "Tìm kiếm...", prefixIcon: Icon(Icons.search, color: Colors.grey), border: InputBorder.none, contentPadding: EdgeInsets.only(top: 5))),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Row(
-              children: const [
-                Text("Admin", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: Icon(Icons.person, color: Colors.blueAccent),
-                ),
-              ],
-            ),
-          )
-        ],
+        actions: [Padding(padding: const EdgeInsets.only(right: 16.0), child: Row(children: const [Text("Admin", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), SizedBox(width: 8), CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, color: Colors.blueAccent))]))],
       ),
-
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              children: [
-                Image.network(
-                  widget.room.image,
-                  width: double.infinity,
-                  height: 250,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 250, color: Colors.grey, child: const Center(child: Icon(Icons.error)),
-                  ),
-                ),
-                Positioned(
-                  bottom: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    color: Colors.black54,
-                    child: Text(
-                      "P. ${widget.room.roomNumber}",
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                )
-              ],
-            ),
-
+            Stack(children: [
+              Image.network(widget.room.image, width: double.infinity, height: 250, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(height: 250, color: Colors.grey, child: const Center(child: Icon(Icons.error)))),
+              Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), color: Colors.black54, child: Text("P. ${widget.room.roomNumber}", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))))
+            ]),
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(widget.room.type, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                      Text(
-                        currencyFormatter.format(widget.room.price),
-                        style: const TextStyle(fontSize: 22, color: Colors.blue, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(widget.room.type, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), Text(currencyFormatter.format(widget.room.price), style: const TextStyle(fontSize: 22, color: Colors.blue, fontWeight: FontWeight.bold))]),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.bed, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(widget.room.bedType, style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 20),
-                      Icon(Icons.circle, size: 12, color: widget.room.status == 'Available' ? Colors.green : Colors.red),
-                      const SizedBox(width: 5),
-                      Text(widget.room.status, style: const TextStyle(fontSize: 16)),
-                    ],
-                  ),
+                  Row(children: [const Icon(Icons.bed, color: Colors.grey), const SizedBox(width: 8), Text(widget.room.bedType, style: const TextStyle(fontSize: 16)), const SizedBox(width: 20), Icon(Icons.circle, size: 12, color: widget.room.status == 'Available' ? Colors.green : Colors.red), const SizedBox(width: 5), Text(widget.room.status, style: const TextStyle(fontSize: 16))]),
                   const Divider(height: 30),
                   const Text("Mô tả", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
-                  const Text(
-                    "Phòng được trang bị đầy đủ tiện nghi, view đẹp thoáng mát. Bao gồm Wifi miễn phí, bữa sáng và dịch vụ dọn phòng hàng ngày.",
-                    style: TextStyle(fontSize: 15, height: 1.5, color: Colors.black54),
-                  ),
+                  const Text("Phòng được trang bị đầy đủ tiện nghi, view đẹp thoáng mát. Bao gồm Wifi miễn phí, bữa sáng và dịch vụ dọn phòng hàng ngày.", style: TextStyle(fontSize: 15, height: 1.5, color: Colors.black54)),
                 ],
               ),
             ),
           ],
         ),
       ),
-
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-            color: Colors.white,
-            boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12)]
-        ),
+        decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12)]),
         child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blueAccent,
-            padding: const EdgeInsets.symmetric(vertical: 15),
-          ),
-          onPressed: () {
-            _showBookingForm(context);
-          },
-          child: const Text(
-            "ĐẶT PHÒNG NGAY",
-            style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
-          ),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, padding: const EdgeInsets.symmetric(vertical: 15)),
+          onPressed: () => _showBookingForm(context),
+          child: const Text("ĐẶT PHÒNG NGAY", style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
         ),
       ),
     );
