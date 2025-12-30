@@ -5,6 +5,7 @@ import 'package:flutter_demo_v1/Screen/Service.dart';
 import 'package:flutter_demo_v1/Screen/RoomDetailScreen.dart';
 import 'package:flutter_demo_v1/Screen/BookingHistoryScreen.dart';
 import 'package:flutter_demo_v1/Screen/LoginScreen.dart';
+import 'package:flutter_demo_v1/Screen/RoomManagerScreen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -42,6 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
     try {
       List<Room> newRooms = await _apiService.fetchRooms(_page, _limit);
+
+      newRooms = newRooms.where((r) => r.isActive).toList();
+
       setState(() {
         _page++;
         if (newRooms.length < _limit) _hasMore = false;
@@ -55,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- HÀM LÀM MỚI DANH SÁCH (Gọi khi đặt phòng xong) ---
   void _refreshRooms() {
     setState(() {
       _page = 1;
@@ -71,14 +74,14 @@ class _HomeScreenState extends State<HomeScreen> {
     String query = _searchController.text.toLowerCase();
     setState(() {
       _rooms = _allRoomsLoaded.where((room) {
-        return room.roomNumber.toString().contains(query) ||
-            room.type.toLowerCase().contains(query);
+        return (room.roomNumber.toString().contains(query) ||
+            room.type.toLowerCase().contains(query)) && room.isActive;
       }).toList();
     });
   }
 
   void _navigateToHistory() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => BookingHistoryScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingHistoryScreen()));
   }
 
   void _handleLogout() {
@@ -107,7 +110,21 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       drawer: Drawer(
-        child: ListView(padding: EdgeInsets.zero, children: [UserAccountsDrawerHeader(decoration: const BoxDecoration(color: Colors.blueAccent), accountName: Text(_userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)), accountEmail: const Text("admin@minihotel.com"), currentAccountPicture: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, size: 40, color: Colors.blueAccent))), ListTile(leading: const Icon(Icons.home, color: Colors.blueAccent), title: const Text('Trang chủ'), onTap: () => Navigator.pop(context)), ListTile(leading: const Icon(Icons.history, color: Colors.blueAccent), title: const Text('Lịch sử đặt phòng'), onTap: () {Navigator.pop(context); _navigateToHistory();}), const Divider(), ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Đăng xuất'), onTap: _handleLogout)]),
+        child: ListView(padding: EdgeInsets.zero, children: [
+          UserAccountsDrawerHeader(decoration: const BoxDecoration(color: Colors.blueAccent), accountName: Text(_userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)), accountEmail: const Text("admin@minihotel.com"), currentAccountPicture: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, size: 40, color: Colors.blueAccent))),
+          ListTile(leading: const Icon(Icons.home, color: Colors.blueAccent), title: const Text('Trang chủ'), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.history, color: Colors.blueAccent), title: const Text('Lịch sử đặt phòng'), onTap: () {Navigator.pop(context); _navigateToHistory();}),
+          ListTile(
+              leading: const Icon(Icons.settings, color: Colors.grey),
+              title: const Text('Quản lý phòng'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomManagerScreen()));
+              }
+          ),
+          const Divider(),
+          ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Đăng xuất'), onTap: _handleLogout)
+        ]),
       ),
       body: Column(
         children: [
@@ -120,13 +137,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (index == _rooms.length) return const Center(child: Padding(padding: EdgeInsets.all(10.0), child: CircularProgressIndicator()));
                 final room = _rooms[index];
                 return GestureDetector(
-                  // --- SỬA LOGIC ONTAP ĐỂ RELOAD KHI BACK VỀ ---
                   onTap: () async {
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => RoomDetailScreen(room: room)),
                     );
-                    // Nếu nhận được tín hiệu 'true' (đã đặt phòng thành công), reload lại danh sách
                     if (result == true) {
                       _refreshRooms();
                     }
@@ -137,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)), child: Image.network(room.image, width: 120, height: 100, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(width: 120, height: 100, color: Colors.grey[200], child: const Icon(Icons.image_not_supported, color: Colors.grey)))),
-                        Expanded(child: Padding(padding: const EdgeInsets.all(10.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Phòng ${room.roomNumber}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), _buildStatusBadge(room.status)]), const SizedBox(height: 5), Row(children: [const Icon(Icons.king_bed, size: 16, color: Colors.grey), const SizedBox(width: 4), Text("${room.type}", style: TextStyle(color: Colors.grey[700], fontSize: 13))]), const SizedBox(height: 8), Text(currencyFormatter.format(room.price), style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16))]))),
+                        Expanded(child: Padding(padding: const EdgeInsets.all(10.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Phòng ${room.roomNumber}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), _buildStatusBadge(room.status)]), const SizedBox(height: 5), Row(children: [const Icon(Icons.king_bed, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(room.type, style: TextStyle(color: Colors.grey[700], fontSize: 13))]), const SizedBox(height: 8), Text(currencyFormatter.format(room.price), style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16))]))),
                       ],
                     ),
                   ),

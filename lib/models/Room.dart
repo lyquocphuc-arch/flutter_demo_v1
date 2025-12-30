@@ -5,6 +5,7 @@ class Room {
   final String bedType;
   final double price;
   final String status;
+  final bool isActive;
   final String image;
 
   Room({
@@ -14,18 +15,32 @@ class Room {
     required this.bedType,
     required this.price,
     required this.status,
+    this.isActive = true,
     required this.image,
   });
 
   factory Room.fromJson(Map<String, dynamic> json) {
     return Room(
-      id: json['id'] ?? "",
+      id: json['id']?.toString() ?? '',
       roomNumber: int.tryParse(json['room_number'].toString()) ?? 0,
       type: json['type'] ?? "Standard",
       bedType: json['bed_type'] ?? "Single Bed",
       price: double.tryParse(json['price'].toString()) ?? 0.0,
-      status: json['status'] ?? "Available",
+      status: json['status']?.toString() ?? "Available",
+      isActive: json['is_active'] ?? true,
       image: json['image'] ?? "https://via.placeholder.com/300",
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      "room_number": roomNumber,
+      "type": type,
+      "bed_type": bedType,
+      "price": price,
+      "status": status,
+      "is_active": isActive,
+      "image": image,
+    };
   }
 }
