@@ -25,13 +25,13 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
-  // --- 1. HÀM XỬ LÝ XÓA ---
-  void _confirmDelete(BuildContext context, String bookingId) {
+  // --- 1. HÀM XỬ LÝ XÓA (ĐÃ SỬA: CẬP NHẬT LẠI STATUS PHÒNG) ---
+  void _confirmDelete(BuildContext context, Booking booking) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Xác nhận hủy", style: TextStyle(color: Colors.red)),
-        content: const Text("Bạn có chắc chắn muốn hủy đơn đặt phòng này không?"),
+        content: Text("Bạn có chắc chắn muốn hủy đơn đặt phòng P.${booking.roomId} không?\nPhòng sẽ được chuyển về trạng thái Trống."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -42,11 +42,15 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
             onPressed: () async {
               Navigator.pop(ctx); // Đóng dialog
 
-              bool success = await _apiService.deleteBooking(bookingId);
+              // 1. Xóa Booking
+              bool deleteSuccess = await _apiService.deleteBooking(booking.id);
 
               if (mounted) {
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã hủy thành công!")));
+                if (deleteSuccess) {
+                  // 2. [QUAN TRỌNG] Cập nhật lại trạng thái phòng về Available
+                  await _apiService.updateRoomStatus(booking.roomId, "Available");
+
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã hủy và cập nhật trạng thái phòng!")));
                   _handleRefresh(); // Load lại danh sách ngay
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lỗi: Không thể hủy.")));
@@ -71,7 +75,6 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
-        // Dùng StatefulBuilder để cập nhật UI trong Modal khi chọn ngày
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
@@ -116,10 +119,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, padding: const EdgeInsets.symmetric(vertical: 15)),
                       onPressed: () async {
-                        // Tạo object mới
                         Booking updatedBooking = Booking(
-                          id: booking.id, // ID cũ
-                          roomId: booking.roomId, // Phòng cũ
+                          id: booking.id,
+                          roomId: booking.roomId,
                           customerName: nameController.text,
                           customerPhone: phoneController.text,
                           checkIn: selectedDateRange.start,
@@ -160,7 +162,6 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
       ),
       body: Column(
         children: [
-          // 1. Ô TÌM KIẾM
           Container(
             padding: const EdgeInsets.all(16.0),
             decoration: BoxDecoration(
@@ -179,8 +180,6 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
               onChanged: (val) => setState(() => _keyword = val),
             ),
           ),
-
-          // 2. DANH SÁCH
           Expanded(
             child: RefreshIndicator(
               onRefresh: _handleRefresh,
@@ -192,7 +191,6 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   if (snapshot.hasError) return Center(child: Text("Lỗi kết nối: ${snapshot.error}"));
                   if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("Chưa có đơn đặt phòng nào"));
 
-                  // Lọc theo tên
                   final list = snapshot.data!.where((b) => b.customerName.toLowerCase().contains(_keyword.toLowerCase())).toList();
 
                   if (list.isEmpty) return const Center(child: Text("Không tìm thấy kết quả"));
@@ -224,8 +222,6 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                               Row(children: [const Icon(Icons.calendar_today, size: 14, color: Colors.green), const SizedBox(width: 4), Text("$checkInStr - $checkOutStr")]),
                             ],
                           ),
-
-                          // --- MENU SỬA / XÓA ---
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -237,7 +233,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                               PopupMenuButton<String>(
                                 onSelected: (value) {
                                   if (value == 'edit') _showEditForm(context, item);
-                                  if (value == 'delete') _confirmDelete(context, item.id);
+                                  // Truyền nguyên object item vào hàm xóa
+                                  if (value == 'delete') _confirmDelete(context, item);
                                 },
                                 itemBuilder: (context) => [
                                   const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue), SizedBox(width: 10), Text('Sửa')])),

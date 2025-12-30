@@ -27,6 +27,79 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     super.dispose();
   }
 
+  // --- HÀM CHỌN NGÀY VÀ GIỜ ---
+  Future<void> _pickDateAndTime(BuildContext ctx) async {
+    // 1. Chọn khoảng NGÀY trước
+    final DateTimeRange? dateRange = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2030),
+      helpText: 'Bước 1: Chọn ngày nhận và trả phòng',
+      saveText: 'Tiếp tục',
+    );
+
+    if (dateRange == null) return;
+
+    // 2. Chọn GIỜ Nhận phòng (Mặc định 14:00)
+    if (!mounted) return;
+    final TimeOfDay? timeCheckIn = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 14, minute: 0),
+      helpText: "Bước 2: Chọn Giờ Nhận Phòng (Check-in)",
+      confirmText: "Xác nhận",
+      cancelText: "Hủy",
+    );
+
+    if (timeCheckIn == null) return;
+
+    // 3. Chọn GIỜ Trả phòng (Mặc định 12:00)
+    if (!mounted) return;
+    final TimeOfDay? timeCheckOut = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 12, minute: 0),
+      helpText: "Bước 3: Chọn Giờ Trả Phòng (Check-out)",
+      confirmText: "Xong",
+    );
+
+    if (timeCheckOut == null) return;
+
+    // 4. Gộp Ngày + Giờ lại
+    DateTime startDateTime = DateTime(
+      dateRange.start.year,
+      dateRange.start.month,
+      dateRange.start.day,
+      timeCheckIn.hour,
+      timeCheckIn.minute,
+    );
+
+    DateTime endDateTime = DateTime(
+      dateRange.end.year,
+      dateRange.end.month,
+      dateRange.end.day,
+      timeCheckOut.hour,
+      timeCheckOut.minute,
+    );
+
+    // Kiểm tra hợp lệ: Ngày trả phải sau ngày nhận
+    if (endDateTime.isBefore(startDateTime)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text("Lỗi: Giờ trả phòng phải sau giờ nhận phòng!")),
+      );
+      return;
+    }
+
+    // Cập nhật UI
+    setState(() {
+      _selectedDateRange = DateTimeRange(start: startDateTime, end: endDateTime);
+    });
+
+    // Đóng Modal cũ và mở lại để cập nhật hiển thị (hoặc chỉ cần setState là đủ nếu UI reactive tốt)
+    // Ở đây mình pop ctx cũ và show lại form để refresh dữ liệu hiển thị
+    Navigator.pop(ctx);
+    _showBookingForm(context);
+  }
+
   void _showBookingForm(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -45,38 +118,32 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
               const SizedBox(height: 10),
               TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "Số điện thoại", prefixIcon: Icon(Icons.phone), border: OutlineInputBorder())),
               const SizedBox(height: 15),
-              InkWell(
-                onTap: () async {
-                  // --- SỬA Ở ĐÂY ---
-                  // Đổi lastDate từ 2026 thành 2030 (hoặc xa hơn tùy ý)
-                  final DateTimeRange? picked = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2030), // Cho phép đặt lịch trước đến năm 2030
-                    helpText: 'Chọn ngày nhận và trả phòng', // Tiêu đề tiếng Việt cho dễ hiểu
-                    saveText: 'Xong',
-                  );
-                  // ------------------
 
-                  if (picked != null) {
-                    setState(() => _selectedDateRange = picked);
-                    Navigator.pop(ctx);
-                    _showBookingForm(context);
-                  }
-                },
+              // --- NÚT CHỌN NGÀY GIỜ ---
+              InkWell(
+                onTap: () => _pickDateAndTime(ctx), // Gọi hàm chọn ngày giờ mới viết ở trên
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
                   decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(5)),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today, color: Colors.blue),
+                      const Icon(Icons.access_time, color: Colors.blue), // Đổi icon thành đồng hồ
                       const SizedBox(width: 10),
-                      Text(_selectedDateRange == null ? "Chọn ngày Check-in - Check-out" : "${DateFormat('dd/MM').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM').format(_selectedDateRange!.end)}", style: const TextStyle(fontSize: 16)),
+                      Expanded(
+                        child: Text(
+                          _selectedDateRange == null
+                              ? "Chọn Ngày & Giờ (Check-in/out)"
+                          // Hiển thị định dạng: 01/01 14:00 - 05/01 12:00
+                              : "${DateFormat('dd/MM HH:mm').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM HH:mm').format(_selectedDateRange!.end)}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 20),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -101,16 +168,32 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
 
     try {
       if (!mounted) return;
+      // Hàm checkAvailability của bạn cần đảm bảo so sánh cả giờ phút (Datetime chuẩn)
       bool isAvailable = await _apiService.checkAvailability(widget.room.id, _selectedDateRange!.start, _selectedDateRange!.end);
+
       if (!mounted) return;
       if (!isAvailable) {
         Navigator.pop(ctx);
-        showDialog(context: context, builder: (_) => AlertDialog(title: const Text("Thất bại", style: TextStyle(color: Colors.red)), content: const Text("Phòng đã bị trùng lịch!"), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Đóng"))]));
+        showDialog(context: context, builder: (_) => AlertDialog(title: const Text("Thất bại", style: TextStyle(color: Colors.red)), content: const Text("Phòng đã bị trùng lịch trong khoảng thời gian này!"), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Đóng"))]));
         return;
       }
 
-      Booking newBooking = Booking(id: '', roomId: widget.room.id, customerName: _nameController.text, customerPhone: _phoneController.text, checkIn: _selectedDateRange!.start, checkOut: _selectedDateRange!.end);
-      await _apiService.createBooking(newBooking);
+      Booking newBooking = Booking(
+          id: '',
+          roomId: widget.room.id,
+          customerName: _nameController.text,
+          customerPhone: _phoneController.text,
+          checkIn: _selectedDateRange!.start,
+          checkOut: _selectedDateRange!.end
+      );
+
+      bool createSuccess = await _apiService.createBooking(newBooking);
+
+      if (!createSuccess) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Lỗi hệ thống: Không thể tạo đơn!"), backgroundColor: Colors.red));
+        return;
+      }
 
       await _apiService.updateRoomStatus(widget.room.id, "Reserved");
 

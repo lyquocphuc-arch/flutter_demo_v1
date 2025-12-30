@@ -44,7 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       List<Room> newRooms = await _apiService.fetchRooms(_page, _limit);
 
-      newRooms = newRooms.where((r) => r.isActive).toList();
+      // Chỉ lấy phòng có is_active = true (nếu API có trả về trường này)
+      // Nếu API chưa có trường is_active thì bỏ dòng filter này đi
+      // newRooms = newRooms.where((r) => r.isActive).toList();
 
       setState(() {
         _page++;
@@ -59,7 +61,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _refreshRooms() {
+  // Chuyển thành Future<void> để dùng cho RefreshIndicator
+  Future<void> _refreshRooms() async {
     setState(() {
       _page = 1;
       _rooms.clear();
@@ -67,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _hasMore = true;
       _isLoading = false;
     });
-    _loadMoreRooms();
+    await _loadMoreRooms();
   }
 
   void _onSearchChanged() {
@@ -75,7 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _rooms = _allRoomsLoaded.where((room) {
         return (room.roomNumber.toString().contains(query) ||
-            room.type.toLowerCase().contains(query)) && room.isActive;
+            room.type.toLowerCase().contains(query));
+        // && room.isActive; // Bật lại nếu model có isActive
       }).toList();
     });
   }
@@ -130,34 +134,39 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const SizedBox(height: 10),
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: _rooms.length + (_hasMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _rooms.length) return const Center(child: Padding(padding: EdgeInsets.all(10.0), child: CircularProgressIndicator()));
-                final room = _rooms[index];
-                return GestureDetector(
-                  onTap: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => RoomDetailScreen(room: room)),
-                    );
-                    if (result == true) {
-                      _refreshRooms();
-                    }
-                  },
-                  child: Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), elevation: 3, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)), child: Image.network(room.image, width: 120, height: 100, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(width: 120, height: 100, color: Colors.grey[200], child: const Icon(Icons.image_not_supported, color: Colors.grey)))),
-                        Expanded(child: Padding(padding: const EdgeInsets.all(10.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Phòng ${room.roomNumber}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), _buildStatusBadge(room.status)]), const SizedBox(height: 5), Row(children: [const Icon(Icons.king_bed, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(room.type, style: TextStyle(color: Colors.grey[700], fontSize: 13))]), const SizedBox(height: 8), Text(currencyFormatter.format(room.price), style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16))]))),
-                      ],
+            // --- THÊM REFRESH INDICATOR ---
+            child: RefreshIndicator(
+              onRefresh: _refreshRooms,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(), // Đảm bảo luôn vuốt được để refresh ngay cả khi ít item
+                controller: _scrollController,
+                itemCount: _rooms.length + (_hasMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _rooms.length) return const Center(child: Padding(padding: EdgeInsets.all(10.0), child: CircularProgressIndicator()));
+                  final room = _rooms[index];
+                  return GestureDetector(
+                    onTap: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => RoomDetailScreen(room: room)),
+                      );
+                      if (result == true) {
+                        _refreshRooms();
+                      }
+                    },
+                    child: Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), elevation: 3, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClipRRect(borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)), child: Image.network(room.image, width: 120, height: 100, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Container(width: 120, height: 100, color: Colors.grey[200], child: const Icon(Icons.image_not_supported, color: Colors.grey)))),
+                          Expanded(child: Padding(padding: const EdgeInsets.all(10.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Phòng ${room.roomNumber}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), _buildStatusBadge(room.status)]), const SizedBox(height: 5), Row(children: [const Icon(Icons.king_bed, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(room.type, style: TextStyle(color: Colors.grey[700], fontSize: 13))]), const SizedBox(height: 8), Text(currencyFormatter.format(room.price), style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16))]))),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ],
