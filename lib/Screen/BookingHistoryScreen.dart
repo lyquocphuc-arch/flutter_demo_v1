@@ -26,7 +26,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) _filterData();
+      if (!_tabController.indexIsChanging) {
+        _filterData();
+      }
     });
     _loadData();
   }
@@ -42,6 +44,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
 
       List<Room> rooms = results[0] as List<Room>;
       List<Booking> list = results[1] as List<Booking>;
+
       DateTime now = DateTime.now();
       bool hasAutoCancelled = false;
 
@@ -54,7 +57,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         }
       }
 
-      if (hasAutoCancelled) list = await _apiService.fetchBookings();
+      if (hasAutoCancelled) {
+        list = await _apiService.fetchBookings();
+      }
 
       if (mounted) {
         setState(() {
@@ -71,11 +76,11 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
 
   String _getRoomNumber(String roomId) {
     try {
-      if (_allRooms.isEmpty) return "Phòng $roomId";
+      if (_allRooms.isEmpty) return "P.?";
       final room = _allRooms.firstWhere((r) => r.id == roomId);
       return "P.${room.roomNumber}";
     } catch (e) {
-      return "Phòng $roomId";
+      return "P.?";
     }
   }
 
@@ -95,7 +100,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
       String k = _searchKeyword.toLowerCase();
       temp = temp.where((b) {
         String roomName = _getRoomNumber(b.roomId).toLowerCase();
-        return b.customerName.toLowerCase().contains(k) || b.customerPhone.contains(k) || roomName.contains(k);
+        return b.customerName.toLowerCase().contains(k) ||
+            b.customerPhone.contains(k) ||
+            roomName.contains(k);
       }).toList();
     }
     setState(() => _filteredBookings = temp);
@@ -105,12 +112,10 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
     bool isAvailable = await _apiService.checkAvailability(b.roomId, DateTime.now(), b.checkOut, excludeBookingId: b.id);
     if (!isAvailable) {
       if(!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phòng đang kẹt, không thể Check-in!")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phòng đang kẹt!")));
       return;
     }
     if (await _apiService.updateBookingStatus(b, BookingStatus.CheckedIn)) {
-      if(!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Check-in thành công")));
       _loadData();
     }
   }
@@ -129,15 +134,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
 
     bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text("Xác nhận Trả phòng"),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildDetailRow("Phòng:", "P.${room!.roomNumber}"),
-          _buildDetailRow("Khách:", b.customerName),
-          const Divider(),
-          _buildDetailRow("Tổng tiền:", currencyFormatter.format(finalPrice), isBold: true, color: Colors.blue),
-        ],
-      ),
+      content: Text("Tổng thu: ${currencyFormatter.format(finalPrice)}"),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Hủy")),
         ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Xác nhận"))
@@ -151,27 +148,16 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
 
   void _cancelBooking(Booking b) async {
     bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text("Xác nhận Hủy"),
-      content: const Text("Hủy đơn đặt phòng này?"),
+      title: const Text("Hủy đơn"),
+      content: const Text("Xác nhận hủy đơn đặt phòng này?"),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Không")),
-        ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(ctx, true), child: const Text("Hủy đơn", style: TextStyle(color: Colors.white)))
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Xác nhận"))
       ],
     )) ?? false;
-    if (confirm && await _apiService.updateBookingStatus(b, BookingStatus.Cancelled)) _loadData();
-  }
-
-  Widget _buildDetailRow(String label, String value, {Color color = Colors.black, bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-          Text(value, style: TextStyle(fontSize: 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
-        ],
-      ),
-    );
+    if (confirm && await _apiService.updateBookingStatus(b, BookingStatus.Cancelled)) {
+      _loadData();
+    }
   }
 
   @override
@@ -180,7 +166,10 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
       appBar: AppBar(
         title: const Text("Quản lý Đặt phòng"),
         backgroundColor: Colors.blueAccent, foregroundColor: Colors.white,
-        bottom: TabBar(controller: _tabController, tabs: const [Tab(text: "Sắp tới"), Tab(text: "Đang ở"), Tab(text: "Lịch sử")]),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [Tab(text: "Sắp tới"), Tab(text: "Đang ở"), Tab(text: "Lịch sử")],
+        ),
       ),
       body: Column(
         children: [
@@ -188,32 +177,55 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
             padding: const EdgeInsets.all(10.0),
             child: TextField(
               decoration: InputDecoration(hintText: "Tìm kiếm...", prefixIcon: const Icon(Icons.search), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
-              onChanged: (val) { _searchKeyword = val; _filterData(); },
+              onChanged: (val) {
+                _searchKeyword = val;
+                _filterData();
+              },
             ),
           ),
           Expanded(
-            child: _isLoading ? const Center(child: CircularProgressIndicator()) : ListView.builder(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
               itemCount: _filteredBookings.length,
               itemBuilder: (ctx, i) {
                 final item = _filteredBookings[i];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  child: ListTile(
-                    onTap: () async {
-                      Room? room;
-                      try { room = _allRooms.firstWhere((r) => r.id == item.roomId); } catch(_) {}
-                      if (room != null) {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => RoomDetailScreen(room: room!)));
-                        _loadData();
-                      }
-                    },
-                    leading: CircleAvatar(
-                      backgroundColor: item.status == BookingStatus.CheckedIn ? Colors.red : item.status == BookingStatus.Cancelled ? Colors.grey : Colors.blue,
-                      child: Text(_getRoomNumber(item.roomId).replaceAll("P.", ""), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                return InkWell(
+                  onTap: () async {
+                    Room? room;
+                    try {
+                      room = _allRooms.firstWhere((r) => r.id == item.roomId);
+                    } catch (_) {
+                      room = await _apiService.fetchRoomById(item.roomId);
+                    }
+                    if (room != null && mounted) {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => RoomDetailScreen(room: room!)),
+                      );
+                      _loadData();
+                    }
+                  },
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: item.status == BookingStatus.CheckedIn ? Colors.red : item.status == BookingStatus.Cancelled ? Colors.grey : Colors.blue,
+                        child: Text(_getRoomNumber(item.roomId).replaceAll("P.", ""), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      ),
+                      title: Text(item.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text("${DateFormat('dd/MM HH:mm').format(item.checkIn)} - ${DateFormat('dd/MM HH:mm').format(item.checkOut)}"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (item.status == BookingStatus.Confirmed) ...[
+                            IconButton(icon: const Icon(Icons.login, color: Colors.green), onPressed: () => _checkIn(item)),
+                            IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => _cancelBooking(item)),
+                          ] else if (item.status == BookingStatus.CheckedIn)
+                            IconButton(icon: const Icon(Icons.logout, color: Colors.orange), onPressed: () => _checkOut(item)),
+                        ],
+                      ),
                     ),
-                    title: Text(item.customerName),
-                    subtitle: Text("${DateFormat('dd/MM HH:mm').format(item.checkIn)} - ${DateFormat('dd/MM HH:mm').format(item.checkOut)}"),
-                    trailing: _buildActionButtons(item),
                   ),
                 );
               },
@@ -222,17 +234,5 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         ],
       ),
     );
-  }
-
-  Widget? _buildActionButtons(Booking b) {
-    if (b.status == BookingStatus.Confirmed) {
-      return Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(icon: const Icon(Icons.login, color: Colors.green), onPressed: () => _checkIn(b)),
-        IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => _cancelBooking(b)),
-      ]);
-    } else if (b.status == BookingStatus.CheckedIn) {
-      return IconButton(icon: const Icon(Icons.logout, color: Colors.orange), onPressed: () => _checkOut(b));
-    }
-    return null;
   }
 }
