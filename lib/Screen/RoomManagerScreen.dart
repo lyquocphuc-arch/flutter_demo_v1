@@ -27,11 +27,13 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
   Future<void> _loadRooms() async {
     setState(() => _isLoading = true);
     final rooms = await _apiService.fetchRooms();
-    setState(() {
-      _allRooms = rooms;
-      _isLoading = false;
-    });
-    _filterRooms();
+    if(mounted) {
+      setState(() {
+        _allRooms = rooms;
+        _isLoading = false;
+      });
+      _filterRooms();
+    }
   }
 
   void _filterRooms() {
@@ -56,15 +58,15 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
       if(!mounted) return;
       if (hasFutureBooking) {
         showDialog(context: context, builder: (ctx) => AlertDialog(
-          title: const Text("Không thể đóng phòng!"),
-          content: const Text("Phòng này đang có khách ở hoặc có đơn đặt trong tương lai."),
+          title: const Text("Không thể ẩn phòng!"),
+          content: const Text("Phòng này đang có khách hoặc có lịch đặt sắp tới."),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))],
         ));
         return;
       }
       bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
-        title: const Text("Xác nhận bảo trì"),
-        content: const Text("Phòng sẽ bị ẩn khỏi sơ đồ đặt phòng."),
+        title: const Text("Xác nhận ẩn phòng"),
+        content: const Text("Phòng sẽ bị ẩn khỏi sơ đồ."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Hủy")),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Đồng ý"))
@@ -72,6 +74,7 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
       )) ?? false;
       if (!confirm) return;
     }
+
     Room updated = Room(
         id: room.id, roomNumber: room.roomNumber, type: room.type, bedType: room.bedType, price: room.price, image: room.image,
         isActive: !room.isActive
@@ -104,13 +107,14 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
                 final room = _filteredRooms[i];
                 return Card(
                   color: room.isActive ? Colors.white : Colors.grey.shade200,
+                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   child: ListTile(
                     leading: CircleAvatar(backgroundImage: NetworkImage(room.image)),
                     title: Text("P.${room.roomNumber} - ${room.type}", style: TextStyle(color: room.isActive ? Colors.black : Colors.grey)),
                     subtitle: Text(currencyFormatter.format(room.price)),
                     trailing: Switch(
                       value: room.isActive,
-                      activeColor: Colors.green,
+                      activeThumbColor: Colors.green,
                       onChanged: (val) => _toggleRoomStatus(room),
                     ),
                   ),

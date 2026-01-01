@@ -50,19 +50,6 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-  Future<void> updateRoomStatus(String roomId, String newStatus) async {
-    Room? oldRoom = await fetchRoomById(roomId);
-    if (oldRoom != null) {
-      Map<String, dynamic> data = oldRoom.toJson();
-      data['status'] = newStatus;
-      await http.put(
-        Uri.parse('$baseUrl/HotelRoom/$roomId'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(data),
-      );
-    }
-  }
-
   Future<List<Booking>> fetchBookings() async {
     final response = await http.get(Uri.parse('$baseUrl/Bookings'));
     if (response.statusCode == 200) {
@@ -97,12 +84,21 @@ class ApiService {
     return response.statusCode == 200;
   }
 
+  Future<bool> updateBookingInfo(Booking booking) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/Bookings/${booking.id}'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(booking.toJson()),
+    );
+    return response.statusCode == 200;
+  }
+
   Future<bool> deleteBooking(String bookingId) async {
     final response = await http.delete(Uri.parse('$baseUrl/Bookings/$bookingId'));
     return response.statusCode == 200;
   }
 
-  Future<bool> checkAvailability(String roomId, DateTime start, DateTime end) async {
+  Future<bool> checkAvailability(String roomId, DateTime start, DateTime end, {String? excludeBookingId}) async {
     try {
       List<Booking> allBookings = await fetchBookings();
       var roomBookings = allBookings.where((b) =>
@@ -112,6 +108,8 @@ class ApiService {
       ).toList();
 
       for (var b in roomBookings) {
+        if (excludeBookingId != null && b.id == excludeBookingId) continue;
+
         if (start.isBefore(b.checkOut) && end.isAfter(b.checkIn)) {
           return false;
         }
@@ -127,23 +125,21 @@ class ApiService {
     if (minutes <= 0) return 0;
     int hours = (minutes / 60).ceil();
     if (hours < 1) hours = 1;
-    double price = (roomPrice / 24 * hours) + 30000 - ((hours ~/ 24) * roomPrice * 0.5);
-    return price > 0 ? price : 0;
+    double price = (roomPrice / 24 * hours) + 30000 - ((hours ~/ 24) * roomPrice * 0.1);
+    return price > 0 ? price.roundToDouble() : 0;
   }
 
-  Future<bool> performCheckOut(Booking booking) async {
-    Room? room = await fetchRoomById(booking.roomId);
-    if (room == null) return false;
-    double finalPrice = calculateTotalPrice(room.price, booking.checkIn, DateTime.now());
-    bool okBooking = await updateBookingStatus(
-        booking,
-        BookingStatus.CheckedOut,
-        totalPrice: finalPrice
-    );
-    if (okBooking) {
-      await updateRoomStatus(booking.roomId, "Available");
-      return true;
+  double calculateLatePenalty(double roomPrice, DateTime scheduledCheckOut) {
+    DateTime now = DateTime.now();
+    if (now.isAfter(scheduledCheckOut)) {
+      int lateMinutes = now.difference(scheduledCheckOut).inMinutes;
+      if (lateMinutes > 15) {
+        int lateHours = (lateMinutes / 60).ceil();
+        double hourlyPrice = roomPrice / 24;
+        double penalty = lateHours * hourlyPrice * 1.5;
+        return penalty.roundToDouble();
+      }
     }
-    return false;
+    return 0;
   }
 }
