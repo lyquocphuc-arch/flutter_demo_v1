@@ -15,37 +15,55 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
-  List<Room> _rooms = [];
+  List<Room> _allRooms = [];
   List<Booking> _bookings = [];
   bool _isLoading = true;
+
   late DateTime _viewTime;
   int _durationHours = 2;
+
+  bool _isFilterExpanded = false;
+  bool _showAvailableOnly = false;
+  Map<String, bool> _selectedRoomTypes = {};
+  Map<String, bool> _selectedBedTypes = {};
 
   @override
   void initState() {
     super.initState();
-    _viewTime = _roundToNext30Minutes(DateTime.now());
+    _viewTime = DateTime.now().add(const Duration(minutes: 5));
     _loadData();
-  }
-
-  DateTime _roundToNext30Minutes(DateTime dt) {
-    int minute = dt.minute;
-    if (minute == 0 || minute == 30) return dt;
-    int add = (minute < 30) ? (30 - minute) : (60 - minute);
-    return dt.add(Duration(minutes: add));
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    DateTime Time_now = DateTime.now();
+    if(Time_now.isAfter(_viewTime))
+      _viewTime= Time_now.add(const Duration(minutes: 5));
     try {
       final rooms = await _apiService.fetchRooms();
       final bookings = await _apiService.fetchBookings();
-      setState(() {
-        _rooms = rooms.where((r) => r.isActive).toList();
-        _rooms.sort((a,b) => a.roomNumber.compareTo(b.roomNumber));
-        _bookings = bookings;
-        _isLoading = false;
-      });
+
+      final activeRooms = rooms.where((r) => r.isActive).toList();
+      activeRooms.sort((a,b) => a.roomNumber.compareTo(b.roomNumber));
+
+      final rTypes = activeRooms.map((e) => e.type).toSet().toList();
+      final bTypes = activeRooms.map((e) => e.bedType).toSet().toList();
+
+      Map<String, bool> rTypeMap = {};
+      Map<String, bool> bTypeMap = {};
+
+      for (var t in rTypes) rTypeMap[t] = true;
+      for (var t in bTypes) bTypeMap[t] = true;
+
+      if (mounted) {
+        setState(() {
+          _allRooms = activeRooms;
+          _bookings = bookings;
+          _selectedRoomTypes = rTypeMap;
+          _selectedBedTypes = bTypeMap;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() => _isLoading = false);
     }
@@ -85,6 +103,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    List<Room> filteredRooms = _allRooms.where((room) {
+      bool typeOk = _selectedRoomTypes[room.type] ?? true;
+      bool bedOk = _selectedBedTypes[room.bedType] ?? true;
+
+      if (!typeOk || !bedOk) return false;
+
+      if (_showAvailableOnly) {
+        String status = _calculateStatus(room);
+        if (status != 'AVAILABLE') return false;
+      }
+
+      return true;
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Sơ đồ phòng"),
@@ -126,6 +158,69 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+
+          ExpansionTile(
+            title: Text("Bộ lọc (${filteredRooms.length} phòng)"),
+            initiallyExpanded: _isFilterExpanded,
+            onExpansionChanged: (val) => setState(() => _isFilterExpanded = val),
+            children: [
+              SwitchListTile(
+                title: const Text("Chỉ hiện phòng Trống (Available)"),
+                value: _showAvailableOnly,
+                activeColor: Colors.green,
+                onChanged: (val) => setState(() => _showAvailableOnly = val),
+              ),
+              const Divider(height: 1),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Align(alignment: Alignment.centerLeft, child: Text("Loại phòng:", style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold))),
+              ),
+              Wrap(
+                spacing: 10,
+                children: _selectedRoomTypes.keys.map((key) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _selectedRoomTypes[key],
+                        onChanged: (val) => setState(() => _selectedRoomTypes[key] = val!),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      Text(key),
+                      const SizedBox(width: 10),
+                    ],
+                  );
+                }).toList(),
+              ),
+
+              const Divider(height: 1),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Align(alignment: Alignment.centerLeft, child: Text("Loại giường:", style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold))),
+              ),
+              Wrap(
+                spacing: 10,
+                children: _selectedBedTypes.keys.map((key) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _selectedBedTypes[key],
+                        onChanged: (val) => setState(() => _selectedBedTypes[key] = val!),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      Text(key),
+                      const SizedBox(width: 10),
+                    ],
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -134,14 +229,15 @@ class _HomeScreenState extends State<HomeScreen> {
               child: GridView.builder(
                 padding: const EdgeInsets.all(10),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2, childAspectRatio: 1.4, crossAxisSpacing: 10, mainAxisSpacing: 10
+                    crossAxisCount: 2, childAspectRatio: 0.9, crossAxisSpacing: 10, mainAxisSpacing: 10
                 ),
-                itemCount: _rooms.length,
+                itemCount: filteredRooms.length,
                 itemBuilder: (ctx, i) {
-                  final room = _rooms[i];
+                  final room = filteredRooms[i];
                   final status = _calculateStatus(room);
                   final bookingCount = _countActiveBookings(room);
-                  Color color = status == 'AVAILABLE' ? Colors.green : status == 'OCCUPIED' ? Colors.red : Colors.orange;
+                  Color statusColor = status == 'AVAILABLE' ? Colors.green : status == 'OCCUPIED' ? Colors.red : Colors.orange;
+
                   return InkWell(
                     onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => RoomDetailScreen(room: room)));
@@ -149,24 +245,56 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                     child: Card(
                       elevation: 3,
-                      shape: RoundedRectangleBorder(side: BorderSide(color: color, width: 2), borderRadius: BorderRadius.circular(8)),
-                      child: Stack(
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(side: BorderSide(color: statusColor, width: 2), borderRadius: BorderRadius.circular(8)),
+                      child: Column(
                         children: [
-                          if (bookingCount > 0)
-                            Positioned(right: 0, top: 0, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: const BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.only(bottomLeft: Radius.circular(8), topRight: Radius.circular(8))), child: Text("$bookingCount đơn", style: const TextStyle(color: Colors.white, fontSize: 10)))),
-                          Padding(
-                            padding: const EdgeInsets.all(10),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          Expanded(
+                            flex: 3,
+                            child: Stack(
+                              fit: StackFit.expand,
                               children: [
-                                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                                  Text("P.${room.roomNumber}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                  Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color))
-                                ]),
-                                const Spacer(),
-                                Text(room.type, style: const TextStyle(fontSize: 12)),
-                                Text("${NumberFormat('#,###').format(room.price)} đ", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Image.network(
+                                  room.image,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey, child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white))),
+                                ),
+                                if (bookingCount > 0)
+                                  Positioned(
+                                    top: 5, right: 5,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(4), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)]),
+                                      child: Text("$bookingCount đơn", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ),
                               ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              color: Colors.white,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text("P.${room.roomNumber}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(color: statusColor.withOpacity(0.1), border: Border.all(color: statusColor), borderRadius: BorderRadius.circular(4)),
+                                        child: Text(status, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor)),
+                                      )
+                                    ],
+                                  ),
+                                  Text(room.type, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text("${NumberFormat('#,###').format(room.price)} đ", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue)),
+                                ],
+                              ),
                             ),
                           ),
                         ],
