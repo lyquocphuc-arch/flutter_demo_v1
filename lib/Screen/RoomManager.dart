@@ -10,7 +10,7 @@ class RoomManager {
 
   Future<List<Room>> getRooms({bool isAdmin = false}) async {
     try {
-      List<Room> allRooms = await _apiService.fetchRooms(1, 100);
+      List<Room> allRooms = await _apiService.fetchRooms();
       if (isAdmin) {
         return allRooms;
       } else {
@@ -36,7 +36,6 @@ class RoomManager {
       type: room.type,
       bedType: room.bedType,
       price: room.price,
-      status: room.status,
       isActive: !room.isActive,
       image: room.image,
     );

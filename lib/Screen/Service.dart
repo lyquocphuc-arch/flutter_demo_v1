@@ -6,14 +6,30 @@ import '../models/Booking.dart';
 class ApiService {
   final String baseUrl = "https://6951463270e1605a1089ad60.mockapi.io";
 
-  Future<List<Room>> fetchRooms(int page, int limit) async {
-    final response = await http.get(Uri.parse('$baseUrl/HotelRoom?page=$page&limit=$limit'));
+  Future<bool> login(String username, String password) async {
+    await Future.delayed(const Duration(seconds: 1));
+    return username.isNotEmpty && password.length >= 6;
+  }
+
+  Future<List<Room>> fetchRooms() async {
+    final response = await http.get(Uri.parse('$baseUrl/HotelRoom'));
     if (response.statusCode == 200) {
       List<dynamic> body = jsonDecode(response.body);
-      return body.map((dynamic item) => Room.fromJson(item)).toList();
-    } else {
-      throw Exception('Load failed');
+      return body.map((item) => Room.fromJson(item)).toList();
     }
+    return [];
+  }
+
+  Future<Room?> fetchRoomById(String id) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/HotelRoom/$id'));
+      if (response.statusCode == 200) {
+        return Room.fromJson(jsonDecode(response.body));
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
   }
 
   Future<bool> createRoom(Room room) async {
@@ -35,12 +51,16 @@ class ApiService {
   }
 
   Future<void> updateRoomStatus(String roomId, String newStatus) async {
-    final url = Uri.parse('$baseUrl/HotelRoom/$roomId');
-    await http.put(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'status': newStatus}),
-    );
+    Room? oldRoom = await fetchRoomById(roomId);
+    if (oldRoom != null) {
+      Map<String, dynamic> data = oldRoom.toJson();
+      data['status'] = newStatus;
+      await http.put(
+        Uri.parse('$baseUrl/HotelRoom/$roomId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(data),
+      );
+    }
   }
 
   Future<List<Booking>> fetchBookings() async {
@@ -61,11 +81,18 @@ class ApiService {
     return response.statusCode == 201;
   }
 
-  Future<bool> updateBooking(Booking booking) async {
+  Future<bool> updateBookingStatus(Booking booking, BookingStatus newStatus, {double? totalPrice}) async {
+    Map<String, dynamic> data = {
+      'status': newStatus.toString().split('.').last,
+    };
+    if (totalPrice != null) {
+      data['totalPrice'] = totalPrice;
+    }
+
     final response = await http.put(
       Uri.parse('$baseUrl/Bookings/${booking.id}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(booking.toJson()),
+      body: jsonEncode(data),
     );
     return response.statusCode == 200;
   }
@@ -78,9 +105,16 @@ class ApiService {
   Future<bool> checkAvailability(String roomId, DateTime start, DateTime end) async {
     try {
       List<Booking> allBookings = await fetchBookings();
-      var roomBookings = allBookings.where((b) => b.roomId == roomId).toList();
+      var roomBookings = allBookings.where((b) =>
+      b.roomId == roomId &&
+          b.status != BookingStatus.Cancelled &&
+          b.status != BookingStatus.CheckedOut
+      ).toList();
+
       for (var b in roomBookings) {
-        if (start.isBefore(b.checkOut) && end.isAfter(b.checkIn)) return false;
+        if (start.isBefore(b.checkOut) && end.isAfter(b.checkIn)) {
+          return false;
+        }
       }
       return true;
     } catch (e) {
@@ -88,8 +122,28 @@ class ApiService {
     }
   }
 
-  Future<bool> login(String username, String password) async {
-    await Future.delayed(const Duration(seconds: 1));
-    return username.isNotEmpty && password.length >= 6;
+  double calculateTotalPrice(double roomPrice, DateTime checkIn, DateTime checkOut) {
+    int minutes = checkOut.difference(checkIn).inMinutes;
+    if (minutes <= 0) return 0;
+    int hours = (minutes / 60).ceil();
+    if (hours < 1) hours = 1;
+    double price = (roomPrice / 24 * hours) + 30000 - ((hours ~/ 24) * roomPrice * 0.5);
+    return price > 0 ? price : 0;
+  }
+
+  Future<bool> performCheckOut(Booking booking) async {
+    Room? room = await fetchRoomById(booking.roomId);
+    if (room == null) return false;
+    double finalPrice = calculateTotalPrice(room.price, booking.checkIn, DateTime.now());
+    bool okBooking = await updateBookingStatus(
+        booking,
+        BookingStatus.CheckedOut,
+        totalPrice: finalPrice
+    );
+    if (okBooking) {
+      await updateRoomStatus(booking.roomId, "Available");
+      return true;
+    }
+    return false;
   }
 }

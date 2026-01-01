@@ -4,7 +4,6 @@ class Room {
   final String type;
   final String bedType;
   final double price;
-  final String status;
   final bool isActive;
   final String image;
 
@@ -14,7 +13,6 @@ class Room {
     required this.type,
     required this.bedType,
     required this.price,
-    required this.status,
     this.isActive = true,
     required this.image,
   });
@@ -26,7 +24,6 @@ class Room {
       type: json['type'] ?? "Standard",
       bedType: json['bed_type'] ?? "Single Bed",
       price: double.tryParse(json['price'].toString()) ?? 0.0,
-      status: json['status']?.toString() ?? "Available",
       isActive: json['is_active'] ?? true,
       image: json['image'] ?? "https://via.placeholder.com/300",
     );
@@ -38,7 +35,6 @@ class Room {
       "type": type,
       "bed_type": bedType,
       "price": price,
-      "status": status,
       "is_active": isActive,
       "image": image,
     };

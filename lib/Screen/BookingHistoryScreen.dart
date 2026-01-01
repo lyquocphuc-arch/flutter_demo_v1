@@ -5,254 +5,185 @@ import 'Service.dart';
 
 class BookingHistoryScreen extends StatefulWidget {
   const BookingHistoryScreen({super.key});
-
   @override
   State<BookingHistoryScreen> createState() => _BookingHistoryScreenState();
 }
 
-class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
+class _BookingHistoryScreenState extends State<BookingHistoryScreen> with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
-  String _keyword = "";
+  late TabController _tabController;
+  List<Booking> _allBookings = [];
+  List<Booking> _filteredBookings = [];
+  String _searchKeyword = "";
+  bool _isLoading = true;
 
-  // Key để force reload FutureBuilder
-  UniqueKey _refreshKey = UniqueKey();
-
-  // Hàm làm mới danh sách
-  Future<void> _handleRefresh() async {
-    setState(() {
-      _refreshKey = UniqueKey();
-    });
-    await Future.delayed(const Duration(milliseconds: 500));
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() => _filterData());
+    _loadData();
   }
 
-  // --- 1. HÀM XỬ LÝ XÓA (ĐÃ SỬA: CẬP NHẬT LẠI STATUS PHÒNG) ---
-  void _confirmDelete(BuildContext context, Booking booking) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Xác nhận hủy", style: TextStyle(color: Colors.red)),
-        content: Text("Bạn có chắc chắn muốn hủy đơn đặt phòng P.${booking.roomId} không?\nPhòng sẽ được chuyển về trạng thái Trống."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Đóng"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx); // Đóng dialog
-
-              // 1. Xóa Booking
-              bool deleteSuccess = await _apiService.deleteBooking(booking.id);
-
-              if (mounted) {
-                if (deleteSuccess) {
-                  // 2. [QUAN TRỌNG] Cập nhật lại trạng thái phòng về Available
-                  await _apiService.updateRoomStatus(booking.roomId, "Available");
-
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã hủy và cập nhật trạng thái phòng!")));
-                  _handleRefresh(); // Load lại danh sách ngay
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lỗi: Không thể hủy.")));
-                }
-              }
-            },
-            child: const Text("Xác nhận hủy", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final list = await _apiService.fetchBookings();
+      setState(() {
+        _allBookings = list;
+        _isLoading = false;
+      });
+      _filterData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
   }
 
-  // --- 2. HÀM XỬ LÝ SỬA (HIỆN FORM) ---
-  void _showEditForm(BuildContext context, Booking booking) {
-    final nameController = TextEditingController(text: booking.customerName);
-    final phoneController = TextEditingController(text: booking.customerPhone);
-    DateTimeRange selectedDateRange = DateTimeRange(start: booking.checkIn, end: booking.checkOut);
+  void _filterData() {
+    List<Booking> temp = [];
+    if (_tabController.index == 0) {
+      temp = _allBookings.where((b) => b.status == BookingStatus.Confirmed).toList();
+      temp.sort((a, b) => a.checkIn.compareTo(b.checkIn));
+    } else if (_tabController.index == 1) {
+      temp = _allBookings.where((b) => b.status == BookingStatus.CheckedIn).toList();
+    } else {
+      temp = _allBookings.where((b) => b.status == BookingStatus.CheckedOut || b.status == BookingStatus.Cancelled).toList();
+      temp.sort((a, b) => b.checkOut.compareTo(a.checkOut));
+    }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Sửa đơn P.${booking.roomId}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                  const SizedBox(height: 15),
-                  TextField(controller: nameController, decoration: const InputDecoration(labelText: "Tên khách hàng", prefixIcon: Icon(Icons.person), border: OutlineInputBorder())),
-                  const SizedBox(height: 10),
-                  TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "Số điện thoại", prefixIcon: Icon(Icons.phone), border: OutlineInputBorder())),
-                  const SizedBox(height: 15),
-                  InkWell(
-                    onTap: () async {
-                      final DateTimeRange? picked = await showDateRangePicker(
-                        context: context,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                        initialDateRange: selectedDateRange,
-                      );
-                      if (picked != null) {
-                        setModalState(() => selectedDateRange = picked);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
-                      decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(5)),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today, color: Colors.blue),
-                          const SizedBox(width: 10),
-                          Text("${DateFormat('dd/MM').format(selectedDateRange.start)} - ${DateFormat('dd/MM').format(selectedDateRange.end)}", style: const TextStyle(fontSize: 16)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, padding: const EdgeInsets.symmetric(vertical: 15)),
-                      onPressed: () async {
-                        Booking updatedBooking = Booking(
-                          id: booking.id,
-                          roomId: booking.roomId,
-                          customerName: nameController.text,
-                          customerPhone: phoneController.text,
-                          checkIn: selectedDateRange.start,
-                          checkOut: selectedDateRange.end,
-                        );
+    if (_searchKeyword.isNotEmpty) {
+      String k = _searchKeyword.toLowerCase();
+      temp = temp.where((b) =>
+      b.customerName.toLowerCase().contains(k) ||
+          b.customerPhone.contains(k) ||
+          b.roomId.contains(k)
+      ).toList();
+    }
+    setState(() => _filteredBookings = temp);
+  }
 
-                        bool success = await _apiService.updateBooking(updatedBooking);
+  void _checkIn(Booking b) async {
+    bool ok = await _apiService.updateBookingStatus(b, BookingStatus.CheckedIn);
+    if (ok) {
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Check-in thành công")));
+      _loadData();
+    }
+  }
 
-                        if (mounted) {
-                          Navigator.pop(ctx);
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cập nhật thành công!")));
-                            _handleRefresh();
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lỗi cập nhật!")));
-                          }
-                        }
-                      },
-                      child: const Text("LƯU THAY ĐỔI", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+  void _checkOut(Booking b) async {
+    bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text("Xác nhận Trả phòng"),
+      content: const Text("Hệ thống sẽ tính tiền và kết thúc đơn này."),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Hủy")),
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Đồng ý"))
+      ],
+    )) ?? false;
+
+    if (!confirm) return;
+    bool ok = await _apiService.performCheckOut(b);
+    if (ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Trả phòng thành công")));
+      _loadData();
+    }
+  }
+
+  void _cancelBooking(Booking b) async {
+    bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text("Xác nhận Hủy"),
+      content: const Text("Hủy đơn đặt phòng này?"),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Không")),
+        ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(ctx, true), child: const Text("Hủy đơn", style: TextStyle(color: Colors.white)))
+      ],
+    )) ?? false;
+
+    if (!confirm) return;
+    bool ok = await _apiService.updateBookingStatus(b, BookingStatus.Cancelled);
+    if (ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã hủy đơn")));
+      _loadData();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Lịch sử đặt phòng"),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
+        title: const Text("Quản lý Đặt phòng"),
+        backgroundColor: Colors.blueAccent, foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white, unselectedLabelColor: Colors.white70,
+          tabs: const [Tab(text: "Sắp tới"), Tab(text: "Đang ở"), Tab(text: "Lịch sử")],
+        ),
       ),
       body: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Colors.blueAccent.withOpacity(0.1),
-              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(10.0),
             child: TextField(
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
-                hintText: "Tìm tên khách...",
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
+                  hintText: "Tìm tên, SĐT, số phòng...",
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10)
               ),
-              onChanged: (val) => setState(() => _keyword = val),
+              onChanged: (val) {
+                _searchKeyword = val;
+                _filterData();
+              },
             ),
           ),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _handleRefresh,
-              child: FutureBuilder<List<Booking>>(
-                key: _refreshKey,
-                future: _apiService.fetchBookings(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                  if (snapshot.hasError) return Center(child: Text("Lỗi kết nối: ${snapshot.error}"));
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("Chưa có đơn đặt phòng nào"));
-
-                  final list = snapshot.data!.where((b) => b.customerName.toLowerCase().contains(_keyword.toLowerCase())).toList();
-
-                  if (list.isEmpty) return const Center(child: Text("Không tìm thấy kết quả"));
-
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(10),
-                    itemCount: list.length,
-                    itemBuilder: (context, index) {
-                      final item = list[index];
-                      final checkInStr = DateFormat('dd/MM').format(item.checkIn);
-                      final checkOutStr = DateFormat('dd/MM').format(item.checkOut);
-
-                      return Card(
-                        elevation: 3,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                            child: const Icon(Icons.person, color: Colors.blueAccent),
-                          ),
-                          title: Text(item.customerName.isEmpty ? "Khách vãng lai" : item.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item.customerPhone, style: TextStyle(color: Colors.grey[600])),
-                              const SizedBox(height: 4),
-                              Row(children: [const Icon(Icons.calendar_today, size: 14, color: Colors.green), const SizedBox(width: 4), Text("$checkInStr - $checkOutStr")]),
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange)),
-                                child: Text("P.${item.roomId}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
-                              ),
-                              PopupMenuButton<String>(
-                                onSelected: (value) {
-                                  if (value == 'edit') _showEditForm(context, item);
-                                  // Truyền nguyên object item vào hàm xóa
-                                  if (value == 'delete') _confirmDelete(context, item);
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue), SizedBox(width: 10), Text('Sửa')])),
-                                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red), SizedBox(width: 10), Text('Hủy')])),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+              itemCount: _filteredBookings.length,
+              itemBuilder: (ctx, i) {
+                final item = _filteredBookings[i];
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: item.status == BookingStatus.CheckedIn ? Colors.red : Colors.blue,
+                      child: Text(item.roomId, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    title: Text(item.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("${DateFormat('dd/MM HH:mm').format(item.checkIn)} - ${DateFormat('dd/MM HH:mm').format(item.checkOut)}"),
+                        if (item.totalPrice > 0)
+                          Text("Tổng: ${NumberFormat('#,###').format(item.totalPrice)} đ", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))
+                      ],
+                    ),
+                    trailing: _buildActionButtons(item),
+                  ),
+                );
+              },
             ),
-          ),
+          )
         ],
       ),
     );
+  }
+
+  Widget? _buildActionButtons(Booking b) {
+    if (b.status == BookingStatus.Confirmed) {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(icon: const Icon(Icons.login, color: Colors.green), onPressed: () => _checkIn(b), tooltip: "Check-in"),
+        IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => _cancelBooking(b), tooltip: "Hủy"),
+      ]);
+    } else if (b.status == BookingStatus.CheckedIn) {
+      return ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, padding: const EdgeInsets.symmetric(horizontal: 10)),
+          onPressed: () => _checkOut(b),
+          child: const Text("Trả phòng", style: TextStyle(color: Colors.white, fontSize: 12))
+      );
+    } else {
+      return Text(b.status == BookingStatus.Cancelled ? "Đã Hủy" : "Hoàn tất", style: TextStyle(color: b.status == BookingStatus.Cancelled ? Colors.red : Colors.grey, fontWeight: FontWeight.bold, fontSize: 12));
+    }
   }
 }

@@ -1,125 +1,124 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/Room.dart';
-import '../Screen/RoomManager.dart';
-
+import '../models/Booking.dart';
+import 'Service.dart';
 
 class RoomManagerScreen extends StatefulWidget {
   const RoomManagerScreen({super.key});
-
   @override
   State<RoomManagerScreen> createState() => _RoomManagerScreenState();
 }
 
 class _RoomManagerScreenState extends State<RoomManagerScreen> {
-  final RoomManager _manager = RoomManager();
+  final ApiService _apiService = ApiService();
   final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
-  List<Room> _rooms = [];
-  bool _isLoading = false;
+  List<Room> _allRooms = [];
+  List<Room> _filteredRooms = [];
+  bool _isLoading = true;
+  bool _showActiveOnly = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchRooms();
+    _loadRooms();
   }
 
-  Future<void> _fetchRooms() async {
+  Future<void> _loadRooms() async {
     setState(() => _isLoading = true);
-    List<Room> rooms = await _manager.getRooms(isAdmin: true);
-    rooms.sort((a, b) {
-      if (!a.isActive && b.isActive) return 1;
-      if (a.isActive && !b.isActive) return -1;
-      return a.roomNumber.compareTo(b.roomNumber);
+    final rooms = await _apiService.fetchRooms();
+    setState(() {
+      _allRooms = rooms;
+      _isLoading = false;
     });
-    if (mounted) setState(() { _rooms = rooms; _isLoading = false; });
+    _filterRooms();
   }
 
-  void _showRoomDialog({Room? room}) {
-    final isEditing = room != null;
-    final numberController = TextEditingController(text: isEditing ? room.roomNumber.toString() : "");
-    final typeController = TextEditingController(text: isEditing ? room.type : "Standard");
-    final bedTypeController = TextEditingController(text: isEditing ? room.bedType : "Single Bed");
-    final priceController = TextEditingController(text: isEditing ? room.price.toString() : "");
-    final imageController = TextEditingController(text: isEditing ? room.image : "https://via.placeholder.com/300");
+  void _filterRooms() {
+    setState(() {
+      if (_showActiveOnly) {
+        _filteredRooms = _allRooms.where((r) => r.isActive).toList();
+      } else {
+        _filteredRooms = List.from(_allRooms);
+      }
+      _filteredRooms.sort((a,b) => a.roomNumber.compareTo(b.roomNumber));
+    });
+  }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEditing ? "Sửa phòng" : "Thêm phòng"),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              TextField(controller: numberController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Số phòng")),
-              TextField(controller: typeController, decoration: const InputDecoration(labelText: "Loại phòng")),
-              TextField(controller: bedTypeController, decoration: const InputDecoration(labelText: "Loại giường")),
-              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Giá")),
-              TextField(controller: imageController, decoration: const InputDecoration(labelText: "URL Ảnh")),
-            ],
-          ),
-        ),
+  Future<void> _toggleRoomStatus(Room room) async {
+    if (room.isActive) {
+      final bookings = await _apiService.fetchBookings();
+      bool hasFutureBooking = bookings.any((b) =>
+      b.roomId == room.id &&
+          (b.status == BookingStatus.Confirmed || b.status == BookingStatus.CheckedIn) &&
+          b.checkOut.isAfter(DateTime.now())
+      );
+      if(!mounted) return;
+      if (hasFutureBooking) {
+        showDialog(context: context, builder: (ctx) => AlertDialog(
+          title: const Text("Không thể đóng phòng!"),
+          content: const Text("Phòng này đang có khách ở hoặc có đơn đặt trong tương lai."),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))],
+        ));
+        return;
+      }
+      bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
+        title: const Text("Xác nhận bảo trì"),
+        content: const Text("Phòng sẽ bị ẩn khỏi sơ đồ đặt phòng."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
-          ElevatedButton(
-            onPressed: () async {
-              if (numberController.text.isEmpty || priceController.text.isEmpty) return;
-
-              final newRoom = Room(
-                id: isEditing ? room.id : "",
-                roomNumber: int.tryParse(numberController.text) ?? 0,
-                type: typeController.text,
-                bedType: bedTypeController.text,
-                price: double.tryParse(priceController.text) ?? 0,
-                status: isEditing ? room.status : "Available",
-                isActive: isEditing ? room.isActive : true,
-                image: imageController.text,
-              );
-
-              bool success = isEditing ? await _manager.editRoom(newRoom) : await _manager.addRoom(newRoom);
-              if (mounted && success) { Navigator.pop(ctx); _fetchRooms(); }
-            },
-            child: const Text("Lưu"),
-          )
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Hủy")),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Đồng ý"))
         ],
-      ),
+      )) ?? false;
+      if (!confirm) return;
+    }
+    Room updated = Room(
+        id: room.id, roomNumber: room.roomNumber, type: room.type, bedType: room.bedType, price: room.price, image: room.image,
+        isActive: !room.isActive
     );
+    await _apiService.updateRoom(updated);
+    _loadRooms();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Quản lý phòng"), backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showRoomDialog(),
-        backgroundColor: Colors.blueAccent,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
-        padding: const EdgeInsets.all(10),
-        itemCount: _rooms.length,
-        itemBuilder: (context, index) {
-          final room = _rooms[index];
-          final isHidden = !room.isActive;
-          return Card(
-            color: isHidden ? Colors.grey[300] : Colors.white,
-            child: ListTile(
-              leading: CircleAvatar(backgroundImage: NetworkImage(room.image)),
-              title: Text("P.${room.roomNumber} - ${room.type}", style: TextStyle(decoration: isHidden ? TextDecoration.lineThrough : null, color: isHidden ? Colors.grey : Colors.black)),
-              subtitle: Text(isHidden ? "Đang ẩn" : "${currencyFormatter.format(room.price)} - ${room.bedType}", style: TextStyle(color: isHidden ? Colors.red : Colors.green)),
-              trailing: PopupMenuButton<String>(
-                onSelected: (val) async {
-                  if (val == 'edit') _showRoomDialog(room: room);
-                  if (val == 'toggle') { await _manager.toggleRoomVisibility(room); _fetchRooms(); }
-                },
-                itemBuilder: (ctx) => [
-                  const PopupMenuItem(value: 'edit', child: Text("Sửa")),
-                  PopupMenuItem(value: 'toggle', child: Text(isHidden ? "Hiện lại" : "Ẩn phòng")),
-                ],
-              ),
+      body: Column(
+        children: [
+          SwitchListTile(
+            title: const Text("Chỉ hiện phòng đang hoạt động"),
+            value: _showActiveOnly,
+            onChanged: (val) {
+              setState(() => _showActiveOnly = val);
+              _filterRooms();
+            },
+          ),
+          const Divider(),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+              itemCount: _filteredRooms.length,
+              itemBuilder: (ctx, i) {
+                final room = _filteredRooms[i];
+                return Card(
+                  color: room.isActive ? Colors.white : Colors.grey.shade200,
+                  child: ListTile(
+                    leading: CircleAvatar(backgroundImage: NetworkImage(room.image)),
+                    title: Text("P.${room.roomNumber} - ${room.type}", style: TextStyle(color: room.isActive ? Colors.black : Colors.grey)),
+                    subtitle: Text(currencyFormatter.format(room.price)),
+                    trailing: Switch(
+                      value: room.isActive,
+                      activeColor: Colors.green,
+                      onChanged: (val) => _toggleRoomStatus(room),
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+          )
+        ],
       ),
     );
   }
