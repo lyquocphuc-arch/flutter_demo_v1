@@ -4,7 +4,6 @@ import '../models/Room.dart';
 import '../models/Booking.dart';
 import 'Service.dart';
 import 'RoomDetailScreen.dart';
-import 'BookingHistoryScreen.dart';
 import 'RoomManagerScreen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -36,31 +35,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    DateTime Time_now = DateTime.now();
-    if(Time_now.isAfter(_viewTime))
-      _viewTime= Time_now.add(const Duration(minutes: 5));
+    DateTime timeNow = DateTime.now();
+    if (timeNow.isAfter(_viewTime)) {
+      _viewTime = timeNow.add(const Duration(minutes: 5));
+    }
     try {
       final rooms = await _apiService.fetchRooms();
       final bookings = await _apiService.fetchBookings();
 
       final activeRooms = rooms.where((r) => r.isActive).toList();
-      activeRooms.sort((a,b) => a.roomNumber.compareTo(b.roomNumber));
+      activeRooms.sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
 
       final rTypes = activeRooms.map((e) => e.type).toSet().toList();
       final bTypes = activeRooms.map((e) => e.bedType).toSet().toList();
 
-      Map<String, bool> rTypeMap = {};
-      Map<String, bool> bTypeMap = {};
-
-      for (var t in rTypes) rTypeMap[t] = true;
-      for (var t in bTypes) bTypeMap[t] = true;
+      if (_selectedRoomTypes.isEmpty) {
+        for (var t in rTypes) _selectedRoomTypes[t] = true;
+      }
+      if (_selectedBedTypes.isEmpty) {
+        for (var t in bTypes) _selectedBedTypes[t] = true;
+      }
 
       if (mounted) {
         setState(() {
           _allRooms = activeRooms;
           _bookings = bookings;
-          _selectedRoomTypes = rTypeMap;
-          _selectedBedTypes = bTypeMap;
           _isLoading = false;
         });
       }
@@ -93,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _pickDateTime() async {
     final date = await showDatePicker(context: context, initialDate: _viewTime, firstDate: DateTime.now().subtract(const Duration(days: 1)), lastDate: DateTime.now().add(const Duration(days: 30)));
     if (date == null) return;
-    if(!mounted) return;
+    if (!mounted) return;
     final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_viewTime));
     if (time == null) return;
     setState(() {
@@ -122,16 +121,12 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text("Sơ đồ phòng"),
         backgroundColor: Colors.blueAccent, foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RoomManagerScreen())),
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
-      ),
-      drawer: Drawer(
-        child: ListView(children: [
-          const DrawerHeader(decoration: BoxDecoration(color: Colors.blueAccent), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.hotel, size: 50, color: Colors.white), SizedBox(height: 10), Text("Mini Hotel Admin", style: TextStyle(color: Colors.white, fontSize: 20))])),
-          ListTile(leading: const Icon(Icons.dashboard), title: const Text("Trang chủ"), onTap: () => Navigator.pop(context)),
-          ListTile(leading: const Icon(Icons.list_alt), title: const Text("Quản lý Đặt phòng"), onTap: () {Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingHistoryScreen()));}),
-          ListTile(leading: const Icon(Icons.settings), title: const Text("Quản lý Phòng"), onTap: () {Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const RoomManagerScreen()));}),
-        ]),
       ),
       body: Column(
         children: [
@@ -165,55 +160,42 @@ class _HomeScreenState extends State<HomeScreen> {
             onExpansionChanged: (val) => setState(() => _isFilterExpanded = val),
             children: [
               SwitchListTile(
-                title: const Text("Chỉ hiện phòng Trống (Available)"),
+                title: const Text("Chỉ hiện phòng Trống"),
                 value: _showAvailableOnly,
-                activeColor: Colors.green,
+                activeThumbColor: Colors.green,
                 onChanged: (val) => setState(() => _showAvailableOnly = val),
               ),
               const Divider(height: 1),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Align(alignment: Alignment.centerLeft, child: Text("Loại phòng:", style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold))),
               ),
-              Wrap(
-                spacing: 10,
+              Column(
                 children: _selectedRoomTypes.keys.map((key) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Checkbox(
-                        value: _selectedRoomTypes[key],
-                        onChanged: (val) => setState(() => _selectedRoomTypes[key] = val!),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      Text(key),
-                      const SizedBox(width: 10),
-                    ],
+                  return CheckboxListTile(
+                    title: Text(key),
+                    value: _selectedRoomTypes[key],
+                    onChanged: (val) => setState(() => _selectedRoomTypes[key] = val!),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+                    dense: true,
                   );
                 }).toList(),
               ),
-
               const Divider(height: 1),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Align(alignment: Alignment.centerLeft, child: Text("Loại giường:", style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold))),
               ),
-              Wrap(
-                spacing: 10,
+              Column(
                 children: _selectedBedTypes.keys.map((key) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Checkbox(
-                        value: _selectedBedTypes[key],
-                        onChanged: (val) => setState(() => _selectedBedTypes[key] = val!),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      Text(key),
-                      const SizedBox(width: 10),
-                    ],
+                  return CheckboxListTile(
+                    title: Text(key),
+                    value: _selectedBedTypes[key],
+                    onChanged: (val) => setState(() => _selectedBedTypes[key] = val!),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+                    dense: true,
                   );
                 }).toList(),
               ),
@@ -229,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: GridView.builder(
                 padding: const EdgeInsets.all(10),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2, childAspectRatio: 0.9, crossAxisSpacing: 10, mainAxisSpacing: 10
+                    crossAxisCount: 2, childAspectRatio: 0.75, crossAxisSpacing: 10, mainAxisSpacing: 10
                 ),
                 itemCount: filteredRooms.length,
                 itemBuilder: (ctx, i) {
@@ -248,51 +230,45 @@ class _HomeScreenState extends State<HomeScreen> {
                       clipBehavior: Clip.antiAlias,
                       shape: RoundedRectangleBorder(side: BorderSide(color: statusColor, width: 2), borderRadius: BorderRadius.circular(8)),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
                             flex: 3,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Image.network(
-                                  room.image,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey, child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white))),
-                                ),
-                                if (bookingCount > 0)
-                                  Positioned(
-                                    top: 5, right: 5,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(4), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)]),
-                                      child: Text("$bookingCount đơn", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ),
-                              ],
+                            child: Image.network(
+                              room.image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey, child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white))),
                             ),
                           ),
                           Expanded(
-                            flex: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              color: Colors.white,
+                            flex: 4,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text("P.${room.roomNumber}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                      Text("P.${room.roomNumber}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(color: statusColor.withOpacity(0.1), border: Border.all(color: statusColor), borderRadius: BorderRadius.circular(4)),
-                                        child: Text(status, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                        decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(4)),
+                                        child: Text(status, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                       )
                                     ],
                                   ),
                                   Text(room.type, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text(room.bedType, style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                   Text("${NumberFormat('#,###').format(room.price)} đ", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue)),
+                                  if (bookingCount > 0)
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(4),
+                                      color: Colors.blue.shade50,
+                                      child: Text("$bookingCount đơn sắp tới/đang ở", style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                    )
                                 ],
                               ),
                             ),

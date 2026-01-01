@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_demo_v1/Screen/Service.dart';
-import 'package:flutter_demo_v1/Screen/HomeScreen.dart';
+import 'Service.dart';
+import 'MainScreen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +15,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _userController.dispose();
+    _passController.dispose();
+    super.dispose();
+  }
+
   void _handleLogin() async {
     setState(() => _isLoading = true);
     bool success = await _apiService.login(_userController.text, _passController.text);
@@ -24,12 +31,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đăng nhập thất bại. Mật khẩu phải > 6 ký tự')),
+        const SnackBar(content: Text('Đăng nhập thất bại (Mật khẩu > 6 ký tự)')),
       );
     }
   }
