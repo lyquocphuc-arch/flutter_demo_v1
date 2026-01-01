@@ -147,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ListTile(
               leading: const Icon(Icons.dashboard),
               title: const Text("Trang chủ"),
-              onTap: () => Navigator.pop(context) // Đang ở Home rồi thì chỉ cần đóng drawer
+              onTap: () => Navigator.pop(context)
           ),
           ListTile(
               leading: const Icon(Icons.list_alt),
