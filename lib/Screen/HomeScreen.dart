@@ -38,16 +38,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-<<<<<<< Updated upstream
     DateTime Time_now = DateTime.now();
     if(Time_now.isAfter(_viewTime))
       _viewTime= Time_now.add(const Duration(minutes: 5));
-=======
     DateTime timeNow = DateTime.now();
     if(timeNow.isAfter(_viewTime)) {
       _viewTime = timeNow.add(const Duration(minutes: 5));
     }
->>>>>>> Stashed changes
     try {
       final rooms = await _apiService.fetchRooms();
       final bookings = await _apiService.fetchBookings();
@@ -134,18 +131,6 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
       ),
-<<<<<<< Updated upstream
-      drawer: Drawer(
-        child: ListView(children: [
-          const DrawerHeader(decoration: BoxDecoration(color: Colors.blueAccent), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.hotel, size: 50, color: Colors.white), SizedBox(height: 10), Text("Mini Hotel Admin", style: TextStyle(color: Colors.white, fontSize: 20))])),
-          ListTile(leading: const Icon(Icons.dashboard), title: const Text("Trang chủ"), onTap: () => Navigator.pop(context)),
-          ListTile(leading: const Icon(Icons.list_alt), title: const Text("Quản lý Đặt phòng"), onTap: () {Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingHistoryScreen()));}),
-          ListTile(leading: const Icon(Icons.settings), title: const Text("Quản lý Phòng"), onTap: () {Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const RoomManagerScreen()));}),
-        ]),
-      ),
-=======
-
-      // --- PHẦN DRAWER CŨ (QUAY LẠI NHƯ YÊU CẦU) ---
       drawer: Drawer(
         child: ListView(children: [
           const DrawerHeader(
@@ -188,9 +173,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ]),
       ),
-
-      // --- PHẦN BODY MỚI (GIỮ NGUYÊN) ---
->>>>>>> Stashed changes
       body: Column(
         children: [
           Container(
@@ -240,15 +222,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-<<<<<<< Updated upstream
                       Checkbox(
                         value: _selectedRoomTypes[key],
                         onChanged: (val) => setState(() => _selectedRoomTypes[key] = val!),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-=======
                       Checkbox(value: _selectedRoomTypes[key], onChanged: (val) => setState(() => _selectedRoomTypes[key] = val!), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
->>>>>>> Stashed changes
                       Text(key),
                       const SizedBox(width: 10),
                     ],
@@ -268,15 +247,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-<<<<<<< Updated upstream
                       Checkbox(
                         value: _selectedBedTypes[key],
                         onChanged: (val) => setState(() => _selectedBedTypes[key] = val!),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-=======
                       Checkbox(value: _selectedBedTypes[key], onChanged: (val) => setState(() => _selectedBedTypes[key] = val!), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
->>>>>>> Stashed changes
                       Text(key),
                       const SizedBox(width: 10),
                     ],
