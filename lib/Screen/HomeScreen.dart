@@ -198,7 +198,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             Text("P.${room.roomNumber}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: statusColor.withOpacity(0.1), border: Border.all(color: statusColor), borderRadius: BorderRadius.circular(4)), child: Text(status, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor)))
                           ]),
-                          Text(room.type, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1),
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(room.bedType, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1),
+                              Text("\t"+room.type, style: const TextStyle(fontSize: 12, color: Colors.red), maxLines: 1),
+                            ],),
                           Text("${NumberFormat('#,###').format(room.price)} đ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))
                         ])))
                       ]),
