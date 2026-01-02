@@ -24,7 +24,7 @@ class Booking {
   factory Booking.fromJson(Map<String, dynamic> json) {
     BookingStatus parseStatus(String? val) {
       return BookingStatus.values.firstWhere(
-            (e) => e.toString().split('.').last == val,
+            (e) => e.name == val,
         orElse: () => BookingStatus.Confirmed,
       );
     }
