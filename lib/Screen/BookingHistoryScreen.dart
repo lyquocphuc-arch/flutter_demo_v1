@@ -142,6 +142,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
     final phoneCtrl = TextEditingController(text: b.customerPhone);
     DateTime start = b.checkIn;
     DateTime end = b.checkOut;
+    double currentPrice = b.totalPrice;
     String roomLabel = _getRoomNumber(b.roomId);
 
     showDialog(context: context, builder: (ctx) => StatefulBuilder(
@@ -165,9 +166,16 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
                   if (timeIn == null) return;
                   final timeOut = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(end));
                   if (timeOut == null) return;
+
+                  Room? room = _allRooms.firstWhere((r) => r.id == b.roomId);
+                  DateTime newStart = DateTime(range.start.year, range.start.month, range.start.day, timeIn.hour, timeIn.minute);
+                  DateTime newEnd = DateTime(range.end.year, range.end.month, range.end.day, timeOut.hour, timeOut.minute);
+                  double newPrice = _apiService.calculateTotalPrice(room.price, newStart, newEnd);
+
                   setStateDialog(() {
-                    start = DateTime(range.start.year, range.start.month, range.start.day, timeIn.hour, timeIn.minute);
-                    end = DateTime(range.end.year, range.end.month, range.end.day, timeOut.hour, timeOut.minute);
+                    start = newStart;
+                    end = newEnd;
+                    currentPrice = newPrice;
                   });
                 } : null,
                 child: Container(
@@ -177,7 +185,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
                 ),
               ),
               const SizedBox(height: 10),
-              Text("Tổng tiền: ${currencyFormatter.format(b.totalPrice)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              Text("Tổng tiền: ${currencyFormatter.format(currentPrice)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
             ],
           ),
         ),
@@ -185,7 +193,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng")),
           if (canEdit)
             ElevatedButton(onPressed: () async {
-              Booking newB = Booking(id: b.id, roomId: b.roomId, customerName: nameCtrl.text, customerPhone: phoneCtrl.text, checkIn: start, checkOut: end, status: b.status, totalPrice: b.totalPrice);
+              Booking newB = Booking(id: b.id, roomId: b.roomId, customerName: nameCtrl.text, customerPhone: phoneCtrl.text, checkIn: start, checkOut: end, status: b.status, totalPrice: currentPrice);
               if (await _apiService.updateBookingInfo(newB)) {
                 Navigator.pop(ctx);
                 _loadData();
@@ -230,16 +238,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
                       ),
                       title: Text(item.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text("${DateFormat('dd/MM HH:mm').format(item.checkIn)} - ${DateFormat('dd/MM HH:mm').format(item.checkOut)}"),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (item.status == BookingStatus.Confirmed) ...[
-                            IconButton(icon: const Icon(Icons.login, color: Colors.green), onPressed: () => _checkIn(item)),
-                            IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => _cancelBooking(item)),
-                          ] else if (item.status == BookingStatus.CheckedIn)
-                            IconButton(icon: const Icon(Icons.logout, color: Colors.orange), onPressed: () => _checkOut(item)),
-                        ],
-                      ),
+                      trailing: _buildActionButtons(item),
                     ),
                   ),
                 );
@@ -249,5 +248,20 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         ],
       ),
     );
+  }
+
+  Widget? _buildActionButtons(Booking b) {
+    if (b.status == BookingStatus.Confirmed) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(icon: const Icon(Icons.login, color: Colors.green), onPressed: () => _checkIn(b)),
+          IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => _cancelBooking(b)),
+        ],
+      );
+    } else if (b.status == BookingStatus.CheckedIn) {
+      return IconButton(icon: const Icon(Icons.logout, color: Colors.orange), onPressed: () => _checkOut(b));
+    }
+    return null;
   }
 }

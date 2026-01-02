@@ -45,6 +45,69 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
     });
   }
 
+  void _addRoom() {
+    final numCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final imgCtrl = TextEditingController(text: "https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=500&q=80");
+    String selectedType = 'Standard';
+    String selectedBed = 'Single Bed';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text("Thêm phòng mới"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: numCtrl, decoration: const InputDecoration(labelText: "Số phòng"), keyboardType: TextInputType.number),
+                TextField(controller: priceCtrl, decoration: const InputDecoration(labelText: "Giá phòng"), keyboardType: TextInputType.number),
+                TextField(controller: imgCtrl, decoration: const InputDecoration(labelText: "Link Ảnh")),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedType,
+                  items: ['Standard', 'VIP', 'Luxury'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (v) => setDialogState(() => selectedType = v!),
+                  decoration: const InputDecoration(labelText: "Loại phòng", border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedBed,
+                  items: ['Single Bed', 'Double Bed'].map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+                  onChanged: (v) => setDialogState(() => selectedBed = v!),
+                  decoration: const InputDecoration(labelText: "Loại giường", border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
+            ElevatedButton(
+              onPressed: () async {
+                if(numCtrl.text.isEmpty || priceCtrl.text.isEmpty) return;
+                Room newRoom = Room(
+                  id: '',
+                  roomNumber: int.tryParse(numCtrl.text) ?? 0,
+                  type: selectedType,
+                  bedType: selectedBed,
+                  price: double.tryParse(priceCtrl.text) ?? 0,
+                  image: imgCtrl.text,
+                  isActive: true,
+                );
+                if (await _apiService.createRoom(newRoom)) {
+                  Navigator.pop(ctx);
+                  _loadRooms();
+                }
+              },
+              child: const Text("Thêm"),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
   void _editRoom(Room room) {
     final numCtrl = TextEditingController(text: room.roomNumber.toString());
     final priceCtrl = TextEditingController(text: room.price.toStringAsFixed(0));
@@ -81,7 +144,7 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
                   keyboardType: TextInputType.number,
                 ),
                 DropdownButtonFormField<String>(
-                  value: selectedType,
+                  initialValue: selectedType,
                   items: typeItems.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                   onChanged: (v) => setDialogState(() => selectedType = v!),
                   decoration: const InputDecoration(labelText: "Loại phòng"),
@@ -156,6 +219,11 @@ class _RoomManagerScreenState extends State<RoomManagerScreen> {
           title: const Text("Quản lý phòng"),
           backgroundColor: Colors.blueAccent,
           foregroundColor: Colors.white
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addRoom,
+        backgroundColor: Colors.blueAccent,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       body: Column(
         children: [
