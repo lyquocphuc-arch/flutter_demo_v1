@@ -26,9 +26,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) {
-        _filterData();
-      }
+      if (!_tabController.indexIsChanging) _filterData();
     });
     _loadData();
   }
@@ -41,26 +39,17 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         _apiService.fetchRooms(),
         _apiService.fetchBookings(),
       ]);
-
       List<Room> rooms = results[0] as List<Room>;
       List<Booking> list = results[1] as List<Booking>;
-
       DateTime now = DateTime.now();
       bool hasAutoCancelled = false;
-
       for (var b in list) {
-        if (b.status == BookingStatus.Confirmed) {
-          if (now.isAfter(b.checkIn.add(const Duration(minutes: 5)))) {
-            await _apiService.updateBookingStatus(b, BookingStatus.Cancelled);
-            hasAutoCancelled = true;
-          }
+        if (b.status == BookingStatus.Confirmed && now.isAfter(b.checkIn.add(const Duration(minutes: 5)))) {
+          await _apiService.updateBookingStatus(b, BookingStatus.Cancelled);
+          hasAutoCancelled = true;
         }
       }
-
-      if (hasAutoCancelled) {
-        list = await _apiService.fetchBookings();
-      }
-
+      if (hasAutoCancelled) list = await _apiService.fetchBookings();
       if (mounted) {
         setState(() {
           _allRooms = rooms;
@@ -95,14 +84,11 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
       temp = _allBookings.where((b) => b.status == BookingStatus.CheckedOut || b.status == BookingStatus.Cancelled).toList();
       temp.sort((a, b) => b.checkOut.compareTo(a.checkOut));
     }
-
     if (_searchKeyword.isNotEmpty) {
       String k = _searchKeyword.toLowerCase();
       temp = temp.where((b) {
         String roomName = _getRoomNumber(b.roomId).toLowerCase();
-        return b.customerName.toLowerCase().contains(k) ||
-            b.customerPhone.contains(k) ||
-            roomName.contains(k);
+        return b.customerName.toLowerCase().contains(k) || b.customerPhone.contains(k) || roomName.contains(k);
       }).toList();
     }
     setState(() => _filteredBookings = temp);
@@ -111,13 +97,10 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
   void _checkIn(Booking b) async {
     bool isAvailable = await _apiService.checkAvailability(b.roomId, DateTime.now(), b.checkOut, excludeBookingId: b.id);
     if (!isAvailable) {
-      if(!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phòng đang kẹt!")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phòng đang kẹt!")));
       return;
     }
-    if (await _apiService.updateBookingStatus(b, BookingStatus.CheckedIn)) {
-      _loadData();
-    }
+    if (await _apiService.updateBookingStatus(b, BookingStatus.CheckedIn)) _loadData();
   }
 
   void _checkOut(Booking b) async {
@@ -128,10 +111,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
       room = await _apiService.fetchRoomById(b.roomId);
     }
     if (room == null) return;
-
     double penalty = _apiService.calculateLatePenalty(room.price, b.checkOut);
     double finalPrice = b.totalPrice + penalty;
-
     bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text("Xác nhận Trả phòng"),
       content: Text("Tổng thu: ${currencyFormatter.format(finalPrice)}"),
@@ -140,24 +121,79 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Xác nhận"))
       ],
     )) ?? false;
-
-    if (confirm && await _apiService.updateBookingStatus(b, BookingStatus.CheckedOut, totalPrice: finalPrice)) {
-      _loadData();
-    }
+    if (confirm && await _apiService.updateBookingStatus(b, BookingStatus.CheckedOut, totalPrice: finalPrice)) _loadData();
   }
 
   void _cancelBooking(Booking b) async {
     bool confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text("Hủy đơn"),
-      content: const Text("Xác nhận hủy đơn đặt phòng này?"),
+      content: const Text("Xác nhận hủy đơn này?"),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Không")),
         ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Xác nhận"))
       ],
     )) ?? false;
-    if (confirm && await _apiService.updateBookingStatus(b, BookingStatus.Cancelled)) {
-      _loadData();
-    }
+    if (confirm && await _apiService.updateBookingStatus(b, BookingStatus.Cancelled)) _loadData();
+  }
+
+  void _showDetailOrEdit(Booking b) {
+    bool canEdit = b.status == BookingStatus.Confirmed;
+    final nameCtrl = TextEditingController(text: b.customerName);
+    final phoneCtrl = TextEditingController(text: b.customerPhone);
+    DateTime start = b.checkIn;
+    DateTime end = b.checkOut;
+    String roomLabel = _getRoomNumber(b.roomId);
+
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(
+      builder: (context, setStateDialog) => AlertDialog(
+        title: Text(canEdit ? "Sửa đơn đặt" : "Chi tiết đơn"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(title: Text("Mã đơn: ${b.id}"), subtitle: Text("Phòng: $roomLabel"), contentPadding: EdgeInsets.zero),
+              TextField(controller: nameCtrl, enabled: canEdit, decoration: const InputDecoration(labelText: "Tên khách", border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: phoneCtrl, enabled: canEdit, decoration: const InputDecoration(labelText: "SĐT", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
+              const SizedBox(height: 15),
+              InkWell(
+                onTap: canEdit ? () async {
+                  final range = await showDateRangePicker(context: context, firstDate: DateTime.now(), lastDate: DateTime(2030), initialDateRange: DateTimeRange(start: start, end: end));
+                  if (range == null) return;
+                  if (!mounted) return;
+                  final timeIn = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(start));
+                  if (timeIn == null) return;
+                  final timeOut = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(end));
+                  if (timeOut == null) return;
+                  setStateDialog(() {
+                    start = DateTime(range.start.year, range.start.month, range.start.day, timeIn.hour, timeIn.minute);
+                    end = DateTime(range.end.year, range.end.month, range.end.day, timeOut.hour, timeOut.minute);
+                  });
+                } : null,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
+                  child: Text("${DateFormat('dd/MM HH:mm').format(start)} - ${DateFormat('dd/MM HH:mm').format(end)}"),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text("Tổng tiền: ${currencyFormatter.format(b.totalPrice)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng")),
+          if (canEdit)
+            ElevatedButton(onPressed: () async {
+              Booking newB = Booking(id: b.id, roomId: b.roomId, customerName: nameCtrl.text, customerPhone: phoneCtrl.text, checkIn: start, checkOut: end, status: b.status, totalPrice: b.totalPrice);
+              if (await _apiService.updateBookingInfo(newB)) {
+                Navigator.pop(ctx);
+                _loadData();
+              }
+            }, child: const Text("Lưu"))
+        ],
+      ),
+    ));
   }
 
   @override
@@ -166,10 +202,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
       appBar: AppBar(
         title: const Text("Quản lý Đặt phòng"),
         backgroundColor: Colors.blueAccent, foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [Tab(text: "Sắp tới"), Tab(text: "Đang ở"), Tab(text: "Lịch sử")],
-        ),
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData)],
+        bottom: TabBar(controller: _tabController, tabs: const [Tab(text: "Sắp tới"), Tab(text: "Đang ở"), Tab(text: "Lịch sử")]),
       ),
       body: Column(
         children: [
@@ -177,35 +211,16 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
             padding: const EdgeInsets.all(10.0),
             child: TextField(
               decoration: InputDecoration(hintText: "Tìm kiếm...", prefixIcon: const Icon(Icons.search), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
-              onChanged: (val) {
-                _searchKeyword = val;
-                _filterData();
-              },
+              onChanged: (val) { _searchKeyword = val; _filterData(); },
             ),
           ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
+            child: _isLoading ? const Center(child: CircularProgressIndicator()) : ListView.builder(
               itemCount: _filteredBookings.length,
               itemBuilder: (ctx, i) {
                 final item = _filteredBookings[i];
                 return InkWell(
-                  onTap: () async {
-                    Room? room;
-                    try {
-                      room = _allRooms.firstWhere((r) => r.id == item.roomId);
-                    } catch (_) {
-                      room = await _apiService.fetchRoomById(item.roomId);
-                    }
-                    if (room != null && mounted) {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => RoomDetailScreen(room: room!)),
-                      );
-                      _loadData();
-                    }
-                  },
+                  onTap: () => _showDetailOrEdit(item),
                   child: Card(
                     margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     child: ListTile(
