@@ -125,7 +125,7 @@ class ApiService {
     if (minutes <= 0) return 0;
     int hours = (minutes / 60).ceil();
     if (hours < 1) hours = 1;
-    double price = (roomPrice / 24 * hours) + 30000 - ((hours ~/ 24) * roomPrice * 0.1);
+    double price = (roomPrice / 24 * hours) + 30000 - ((hours ~/ 24) * 30000);
     return price > 0 ? price.roundToDouble() : 0;
   }
 
