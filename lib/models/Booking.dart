@@ -48,7 +48,7 @@ class Booking {
       "customerPhone": customerPhone,
       "checkIn": checkIn.toIso8601String(),
       "checkOut": checkOut.toIso8601String(),
-      "status": status.toString().split('.').last,
+      "status": status.name,
       "totalPrice": totalPrice,
     };
   }
